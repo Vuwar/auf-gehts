@@ -23,7 +23,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(e => e.Email).IsRequired();
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.LastSeenAt).HasDefaultValueSql("now()");
-            entity.HasIndex(e => e.Email).IsUnique();
         });
 
         modelBuilder.Entity<Week>(entity =>
