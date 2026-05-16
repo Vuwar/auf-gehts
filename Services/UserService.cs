@@ -1,6 +1,7 @@
 using Api.DTOs.Requests;
 using Api.Models;
 using Api.Repositories;
+using Microsoft.EntityFrameworkCore;
 
 namespace Api.Services;
 
@@ -11,7 +12,16 @@ public class UserService(IUserRepository repo)
         var user = await repo.GetByIdAsync(id);
         if (user is null)
         {
-            user = await repo.AddAsync(new User { Id = id, Email = email });
+            try
+            {
+                user = await repo.AddAsync(new User { Id = id, Email = email });
+            }
+            catch (DbUpdateException)
+            {
+                // Race condition: another concurrent request created the user. Fetch again.
+                user = await repo.GetByIdAsync(id);
+                if (user is null) throw;
+            }
         }
         else if (user.LastSeenAt < DateTime.UtcNow.AddMinutes(-5))
         {
