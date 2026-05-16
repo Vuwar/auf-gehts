@@ -1,0 +1,11 @@
+**/.git
+**/.vs
+**/bin
+**/obj
+**/node_modules
+**/dist
+client
+.github
+*.md
+appsettings.Development.json
+*.csproj.user
