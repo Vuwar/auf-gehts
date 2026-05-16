@@ -9,10 +9,49 @@ import Abenteuer from './components/Abenteuer'
 import { AuthProvider, useAuth } from './auth'
 import './App.css'
 
-function ProtectedLayout() {
-  const { user, profile, signOut, loading } = useAuth()
-  const location = useLocation()
+function TopBar() {
+  const { user, profile, signOut } = useAuth()
   const displayLabel = profile?.displayName || user?.email
+
+  return (
+    <header className="top-bar">
+      <NavLink to="/profile" className="top-bar-profile">
+        <span className="top-bar-avatar">{(displayLabel ?? '?')[0]?.toUpperCase()}</span>
+        <span className="top-bar-name">{displayLabel}</span>
+      </NavLink>
+      <nav className="top-bar-nav">
+        <NavLink to="/dashboard" className={({ isActive }) => `top-bar-link ${isActive ? 'active' : ''}`}>Dashboard</NavLink>
+        <NavLink to="/abenteuer" className={({ isActive }) => `top-bar-link ${isActive ? 'active' : ''}`}>Abenteuer</NavLink>
+        <NavLink to="/library" className={({ isActive }) => `top-bar-link ${isActive ? 'active' : ''}`}>Library</NavLink>
+        <NavLink to="/reader" className={({ isActive }) => `top-bar-link ${isActive ? 'active' : ''}`}>Reader</NavLink>
+      </nav>
+      <button onClick={() => signOut()} className="top-bar-signout">Sign out</button>
+    </header>
+  )
+}
+
+function BottomNav() {
+  const items: { to: string; label: string; icon: string }[] = [
+    { to: '/dashboard', label: 'Home', icon: '🏠' },
+    { to: '/abenteuer', label: 'Abenteuer', icon: '🗺️' },
+    { to: '/library', label: 'Library', icon: '📚' },
+    { to: '/reader', label: 'Reader', icon: '📖' },
+  ]
+  return (
+    <nav className="bottom-nav">
+      {items.map(it => (
+        <NavLink key={it.to} to={it.to} className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
+          <span className="bottom-nav-icon">{it.icon}</span>
+          <span className="bottom-nav-label">{it.label}</span>
+        </NavLink>
+      ))}
+    </nav>
+  )
+}
+
+function ProtectedLayout() {
+  const { user, loading } = useAuth()
+  const location = useLocation()
 
   if (loading) {
     return <main><div className="app-content"><p className="empty-state">Loading...</p></div></main>
@@ -23,24 +62,13 @@ function ProtectedLayout() {
   }
 
   return (
-    <main>
-      <nav className="app-nav">
-        <div className="app-nav-left">
-          <NavLink to="/dashboard" className={({ isActive }) => `app-nav-btn ${isActive ? 'active' : ''}`}>Dashboard</NavLink>
-          <NavLink to="/abenteuer" className={({ isActive }) => `app-nav-btn ${isActive ? 'active' : ''}`}>Abenteuer</NavLink>
-          <NavLink to="/library" className={({ isActive }) => `app-nav-btn ${isActive ? 'active' : ''}`}>Library</NavLink>
-          <NavLink to="/reader" className={({ isActive }) => `app-nav-btn ${isActive ? 'active' : ''}`}>Reader</NavLink>
-        </div>
-        <div className="app-nav-right">
-          <NavLink to="/profile" className={({ isActive }) => `app-nav-btn ${isActive ? 'active' : ''}`}>{displayLabel}</NavLink>
-          <button onClick={() => signOut()} className="app-nav-btn">Sign out</button>
-        </div>
-      </nav>
-
-      <div className="app-content">
+    <div className="app-shell">
+      <TopBar />
+      <main className="app-content">
         <Outlet />
-      </div>
-    </main>
+      </main>
+      <BottomNav />
+    </div>
   )
 }
 
