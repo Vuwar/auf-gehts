@@ -4,7 +4,8 @@ import { api, type Stats, type Week } from '../api'
 import { useAuth } from '../auth'
 
 export default function Dashboard() {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
+  const displayLabel = profile?.displayName || user?.email
   const [stats, setStats] = useState<Stats | null>(null)
   const [weeks, setWeeks] = useState<Week[]>([])
   const [loading, setLoading] = useState(true)
@@ -24,8 +25,8 @@ export default function Dashboard() {
     <div className="deck">
       <div className="deck-header">
         <div>
-          <h1>Willkommen!</h1>
-          <p className="hint">Signed in as {user?.email}</p>
+          <h1>Willkommen{profile?.displayName ? `, ${profile.displayName}` : ''}!</h1>
+          <p className="hint">Signed in as {displayLabel}</p>
         </div>
       </div>
 

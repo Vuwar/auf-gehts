@@ -49,7 +49,7 @@ export default function Profile() {
         <span className="card-label">Email</span>
         <p>{profile.email}</p>
 
-        <span className="card-label">Display name</span>
+        <span className="card-label">Username</span>
         <input type="text" value={displayName} onChange={e => setDisplayName(e.target.value)} />
 
         <span className="card-label">Anthropic API key (optional)</span>

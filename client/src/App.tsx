@@ -10,7 +10,8 @@ import { AuthProvider, useAuth } from './auth'
 import './App.css'
 
 function Layout() {
-  const { user, signOut } = useAuth()
+  const { user, profile, signOut } = useAuth()
+  const displayLabel = profile?.displayName || user?.email
 
   return (
     <main>
@@ -22,7 +23,7 @@ function Layout() {
           <NavLink to="/reader" className={({ isActive }) => `app-nav-btn ${isActive ? 'active' : ''}`}>Reader</NavLink>
         </div>
         <div className="app-nav-right">
-          <NavLink to="/profile" className={({ isActive }) => `app-nav-btn ${isActive ? 'active' : ''}`}>{user?.email}</NavLink>
+          <NavLink to="/profile" className={({ isActive }) => `app-nav-btn ${isActive ? 'active' : ''}`}>{displayLabel}</NavLink>
           <button onClick={() => signOut()} className="app-nav-btn">Sign out</button>
         </div>
       </nav>

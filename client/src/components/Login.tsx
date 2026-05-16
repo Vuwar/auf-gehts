@@ -42,10 +42,11 @@ export default function Login() {
           {mode === 'signup' && (
             <input
               type="text"
-              placeholder="Display name"
+              placeholder="Username"
               value={displayName}
               onChange={e => setDisplayName(e.target.value)}
-              autoComplete="name"
+              autoComplete="username"
+              required
             />
           )}
           <input
