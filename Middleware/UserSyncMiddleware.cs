@@ -14,7 +14,9 @@ public class UserSyncMiddleware(RequestDelegate next, IMemoryCache cache)
         {
             var sub = context.User.FindFirst("sub")?.Value
                 ?? context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            var email = context.User.FindFirst("email")?.Value ?? string.Empty;
+            var email = context.User.FindFirst("email")?.Value
+                ?? context.User.FindFirst(ClaimTypes.Email)?.Value
+                ?? string.Empty;
 
             if (Guid.TryParse(sub, out var userId))
             {
