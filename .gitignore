@@ -144,3 +144,9 @@ vite.config.ts.timestamp-*
 
 # .vs folder
 .vs
+
+# .NET
+bin/
+obj/
+*.csproj.user
+appsettings.Development.json

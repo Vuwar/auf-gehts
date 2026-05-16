@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Remove-Item api\\\\client -Recurse -Force -Confirm:$false)",
+      "PowerShell(Move-Item client api\\\\client)",
+      "PowerShell($root = \"C:\\\\Users\\\\user\\\\auf-gehts\"; Move-Item \"$root\\\\api\\\\client\" \"$root\\\\client\"; Move-Item \"$root\\\\api\\\\Properties\" \"$root\\\\Properties\"; Move-Item \"$root\\\\api\\\\api.csproj\" \"$root\\\\api.csproj\"; Move-Item \"$root\\\\api\\\\api.csproj.user\" \"$root\\\\api.csproj.user\"; Move-Item \"$root\\\\api\\\\api.http\" \"$root\\\\api.http\"; Move-Item \"$root\\\\api\\\\appsettings.Development.json\" \"$root\\\\appsettings.Development.json\"; Move-Item \"$root\\\\api\\\\appsettings.json\" \"$root\\\\appsettings.json\"; Move-Item \"$root\\\\api\\\\Program.cs\" \"$root\\\\Program.cs\"; Move-Item \"$root\\\\api\\\\.gitignore\" \"$root\\\\api-gitignore-temp\")",
+      "Bash(claude mcp *)",
+      "PowerShell($env:ASPNETCORE_ENVIRONMENT = \"Development\"; cmd /c \"set ASPNETCORE_ENVIRONMENT=Development && cd C:\\\\Users\\\\user\\\\auf-gehts && dotnet run\" 2>&1 | Select-Object -First 15)"
+    ]
+  }
+}

@@ -1,12 +1,11 @@
 import { useState } from 'react'
 
 interface FlashCardProps {
-  german: string
-  english: string
-  hint?: string
+  front: string
+  back: string
 }
 
-export default function FlashCard({ german, english, hint }: FlashCardProps) {
+export default function FlashCard({ front, back }: FlashCardProps) {
   const [flipped, setFlipped] = useState(false)
 
   return (
@@ -14,18 +13,17 @@ export default function FlashCard({ german, english, hint }: FlashCardProps) {
       className="flashcard-container"
       onClick={() => setFlipped(f => !f)}
       role="button"
-      aria-label={flipped ? 'Show German word' : 'Reveal translation'}
+      aria-label={flipped ? 'Show front' : 'Reveal back'}
     >
       <div className={`flashcard ${flipped ? 'flipped' : ''}`}>
         <div className="flashcard-face flashcard-front">
-          <span className="card-label">German</span>
-          <p className="card-word">{german}</p>
-          {hint && <span className="card-hint">{hint}</span>}
+          <span className="card-label">Front</span>
+          <p className="card-word">{front}</p>
           <span className="card-prompt">click to reveal</span>
         </div>
         <div className="flashcard-face flashcard-back">
-          <span className="card-label">English</span>
-          <p className="card-word">{english}</p>
+          <span className="card-label">Back</span>
+          <p className="card-word">{back}</p>
           <span className="card-prompt">click to go back</span>
         </div>
       </div>
