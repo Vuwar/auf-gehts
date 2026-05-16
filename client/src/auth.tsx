@@ -27,15 +27,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data }) => {
+    supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
-      if (data.session) await refreshProfile()
       setLoading(false)
+      if (data.session) refreshProfile()
     })
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession)
-      if (newSession) await refreshProfile()
+      if (newSession) refreshProfile()
       else setProfile(null)
     })
 
