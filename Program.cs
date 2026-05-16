@@ -1,91 +1,105 @@
 using System.Text.Json.Serialization;
 using Api.Data;
+using Api.Middleware;
+using Api.Repositories;
+using Api.Services;
+using Api.Utils;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.ConfigureHttpJsonOptions(options =>
+// Railway / production port binding
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrEmpty(port))
 {
-    options.SerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+    builder.WebHost.ConfigureKestrel(o => o.ListenAnyIP(int.Parse(port)));
+}
+
+builder.Services.AddControllers().AddJsonOptions(options =>
+{
+    options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+    options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
 });
 
 builder.Services.AddOpenApi();
+var allowedOrigins = (builder.Configuration["Cors:AllowedOrigins"] ?? "http://localhost:3000")
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins("http://localhost:3000")
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
 });
 
+builder.Services.AddMemoryCache();
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IWeekRepository, WeekRepository>();
+builder.Services.AddScoped<IWordSetRepository, WordSetRepository>();
+builder.Services.AddScoped<IWordRepository, WordRepository>();
+builder.Services.AddScoped<IProgressRepository, ProgressRepository>();
+
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<WeekService>();
+builder.Services.AddScoped<WordSetService>();
+builder.Services.AddScoped<WordService>();
+builder.Services.AddScoped<VocabService>();
+builder.Services.AddScoped<ProgressService>();
+builder.Services.AddScoped<StatsService>();
+builder.Services.AddScoped<DictionaryService>();
+builder.Services.AddScoped<AiService>();
+
+var projectRef = builder.Configuration["Supabase:ProjectRef"]
+    ?? throw new InvalidOperationException("Supabase:ProjectRef missing");
+var jwksUrl = $"https://{projectRef}.supabase.co/auth/v1/.well-known/jwks.json";
+
+var jwksManager = new ConfigurationManager<OpenIdConnectConfiguration>(
+    jwksUrl,
+    new JwksRetriever(),
+    new HttpDocumentRetriever { RequireHttps = true });
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.ConfigurationManager = jwksManager;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+        };
+    });
+builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
-    app.UseCors();
+}
+app.UseCors();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await SeedData.SeedAsync(db);
 }
 
-app.UseHttpsRedirection();
-
-// Deck endpoints
-app.MapGet("/api/decks", async (AppDbContext db) =>
-    await db.Decks.OrderByDescending(d => d.CreatedAt).ToListAsync());
-
-app.MapGet("/api/decks/{id}", async (Guid id, AppDbContext db) =>
-    await db.Decks.Include(d => d.FlashCards).FirstOrDefaultAsync(d => d.Id == id)
-        is { } deck ? Results.Ok(deck) : Results.NotFound());
-
-app.MapPost("/api/decks", async (Api.Models.Deck deck, AppDbContext db) =>
-{
-    db.Decks.Add(deck);
-    await db.SaveChangesAsync();
-    return Results.Created($"/api/decks/{deck.Id}", deck);
-});
-
-app.MapDelete("/api/decks/{id}", async (Guid id, AppDbContext db) =>
-{
-    var deck = await db.Decks.FindAsync(id);
-    if (deck is null) return Results.NotFound();
-    db.Decks.Remove(deck);
-    await db.SaveChangesAsync();
-    return Results.NoContent();
-});
-
-// FlashCard endpoints
-app.MapGet("/api/decks/{deckId}/flashcards", async (Guid deckId, AppDbContext db) =>
-    await db.FlashCards.Where(f => f.DeckId == deckId).OrderBy(f => f.CreatedAt).ToListAsync());
-
-app.MapPost("/api/decks/{deckId}/flashcards", async (Guid deckId, Api.Models.FlashCard card, AppDbContext db) =>
-{
-    card.DeckId = deckId;
-    db.FlashCards.Add(card);
-    await db.SaveChangesAsync();
-    return Results.Created($"/api/decks/{deckId}/flashcards/{card.Id}", card);
-});
-
-app.MapPut("/api/flashcards/{id}", async (Guid id, Api.Models.FlashCard updated, AppDbContext db) =>
-{
-    var card = await db.FlashCards.FindAsync(id);
-    if (card is null) return Results.NotFound();
-    card.Front = updated.Front;
-    card.Back = updated.Back;
-    await db.SaveChangesAsync();
-    return Results.Ok(card);
-});
-
-app.MapDelete("/api/flashcards/{id}", async (Guid id, AppDbContext db) =>
-{
-    var card = await db.FlashCards.FindAsync(id);
-    if (card is null) return Results.NotFound();
-    db.FlashCards.Remove(card);
-    await db.SaveChangesAsync();
-    return Results.NoContent();
-});
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseMiddleware<UserSyncMiddleware>();
+app.MapControllers();
 
 app.Run();
