@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, NavLink } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, NavLink, Outlet, useLocation } from 'react-router-dom'
 import Library from './components/Library'
 import WordSetView from './components/WordSetView'
 import Dashboard from './components/Dashboard'
@@ -9,9 +9,18 @@ import Abenteuer from './components/Abenteuer'
 import { AuthProvider, useAuth } from './auth'
 import './App.css'
 
-function Layout() {
-  const { user, profile, signOut } = useAuth()
+function ProtectedLayout() {
+  const { user, profile, signOut, loading } = useAuth()
+  const location = useLocation()
   const displayLabel = profile?.displayName || user?.email
+
+  if (loading) {
+    return <main><div className="app-content"><p className="empty-state">Loading...</p></div></main>
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  }
 
   return (
     <main>
@@ -29,34 +38,32 @@ function Layout() {
       </nav>
 
       <div className="app-content">
-        <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/abenteuer" element={<Abenteuer />} />
-          <Route path="/abenteuer/:weekSlug" element={<Abenteuer />} />
-          <Route path="/library" element={<Library />} />
-          <Route path="/sets/:setSlug" element={<WordSetView />} />
-          <Route path="/reader" element={<Reader />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
+        <Outlet />
       </div>
     </main>
   )
-}
-
-function AppShell() {
-  const { user, loading } = useAuth()
-  if (loading) return <main><div className="app-content"><p className="empty-state">Loading...</p></div></main>
-  if (!user) return <Login />
-  return <Layout />
 }
 
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppShell />
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Login />} />
+
+          <Route element={<ProtectedLayout />}>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/abenteuer" element={<Abenteuer />} />
+            <Route path="/abenteuer/:weekSlug" element={<Abenteuer />} />
+            <Route path="/library" element={<Library />} />
+            <Route path="/sets/:setSlug" element={<WordSetView />} />
+            <Route path="/reader" element={<Reader />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Route>
+        </Routes>
       </AuthProvider>
     </BrowserRouter>
   )
