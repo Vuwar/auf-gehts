@@ -6,22 +6,24 @@ using Api.Repositories;
 
 namespace Api.Services;
 
-public class WordService(IWordRepository words, IWordSetRepository sets)
+public class WordService(IWordRepository words, IWordSetRepository sets, CurrentUserAccessor currentUser)
 {
     public async Task<List<WordResponse>?> ListBySetAsync(Guid setId, Guid currentUserId)
     {
         var set = await sets.GetByIdAsync(setId);
         if (set is null) return null;
-        if (!set.IsPublic && set.OwnerUserId != currentUserId) return null;
+        if (!set.IsPublic && set.CreatedByUserId != currentUserId) return null;
         var list = await words.ListBySetAsync(setId);
         return list.Select(w => w.ToResponse()).ToList();
     }
 
     public async Task<WordResponse?> CreateAsync(Guid setId, CreateWordRequest req, Guid userId)
     {
+        var user = await currentUser.GetAsync();
+        if (user?.Role == UserRole.ViewOnly) return null;
         var set = await sets.GetByIdAsync(setId);
         if (set is null) return null;
-        if (!CanEdit(set, userId)) return null;
+        if (!CanEdit(set, user)) return null;
         var word = new Word
         {
             WordSetId = setId,
@@ -35,9 +37,11 @@ public class WordService(IWordRepository words, IWordSetRepository sets)
 
     public async Task<int?> BulkAddAsync(Guid setId, BulkAddWordsRequest req, Guid userId)
     {
+        var user = await currentUser.GetAsync();
+        if (user?.Role == UserRole.ViewOnly) return null;
         var set = await sets.GetByIdAsync(setId);
         if (set is null) return null;
-        if (!CanEdit(set, userId)) return null;
+        if (!CanEdit(set, user)) return null;
         var entities = req.Words.Select(w => new Word
         {
             WordSetId = setId,
@@ -51,16 +55,21 @@ public class WordService(IWordRepository words, IWordSetRepository sets)
 
     public async Task<bool> DeleteAsync(Guid id, Guid userId)
     {
+        var user = await currentUser.GetAsync();
+        if (user?.Role == UserRole.ViewOnly) return false;
         var word = await words.GetByIdAsync(id);
         if (word is null) return false;
         var set = await sets.GetByIdAsync(word.WordSetId);
-        if (set is null || !CanEdit(set, userId)) return false;
+        if (set is null || !CanEdit(set, user)) return false;
         await words.DeleteAsync(word);
         return true;
     }
 
-    private static bool CanEdit(WordSet set, Guid userId) =>
-        set.IsPublic
-            ? set.CreatedByUserId == userId  // public sets editable by creator
-            : set.OwnerUserId == userId;     // private sets editable by owner
+    private static bool CanEdit(WordSet set, User? user)
+    {
+        if (user is null) return false;
+        if (user.Role == UserRole.Admin) return true;
+        if (user.Role == UserRole.ViewOnly) return false;
+        return set.CreatedByUserId == user.Id;
+    }
 }

@@ -15,7 +15,8 @@ public static class WordSetMapper
             s.Description,
             s.Level,
             s.IsPublic,
-            s.OwnerUserId == currentUserId,
+            s.IsOfficial,
+            s.CreatedByUserId == currentUserId,
             wordCount,
             status.ToString(),
             s.CreatedAt

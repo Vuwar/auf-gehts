@@ -28,6 +28,7 @@ export interface WordSet {
   description: string | null
   level: string | null
   isPublic: boolean
+  isOfficial: boolean
   isOwner: boolean
   wordCount: number
   progressStatus: 'NotStarted' | 'Active' | 'Completed'
@@ -48,6 +49,7 @@ export interface Library {
   active: WordSet[]
   completed: WordSet[]
   mine: WordSet[]
+  browse: WordSet[]
 }
 
 export interface Stats {
@@ -77,10 +79,13 @@ export interface GeneratedText {
   remainingToday: number
 }
 
+export type UserRole = 'Admin' | 'Default' | 'ViewOnly'
+
 export interface UserProfile {
   id: string
   email: string
   displayName: string | null
+  role: UserRole
   hasAnthropicKey: boolean
   createdAt: string
   lastSeenAt: string
@@ -110,7 +115,7 @@ export const api = {
 
   getLibrary: () => request<Library>(`${API_BASE}/sets/library`),
   getSet: (idOrSlug: string) => request<WordSet>(`${API_BASE}/sets/${idOrSlug}`),
-  createSet: (data: { weekId?: string; name: string; description?: string; level?: string; isPublic: boolean }) =>
+  createSet: (data: { weekId?: string; name: string; description?: string; level?: string; isPublic: boolean; isOfficial?: boolean }) =>
     request<WordSet>(`${API_BASE}/sets`, {
       method: 'POST',
       body: JSON.stringify({
@@ -119,9 +124,20 @@ export const api = {
         description: data.description ?? null,
         level: data.level ?? null,
         isPublic: data.isPublic,
+        isOfficial: data.isOfficial ?? false,
       }),
     }),
   deleteSet: (id: string) => request<void>(`${API_BASE}/sets/${id}`, { method: 'DELETE' }),
+  updateSet: (id: string, data: { name?: string; description?: string; level?: string; isPublic?: boolean }) =>
+    request<WordSet>(`${API_BASE}/sets/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        name: data.name ?? null,
+        description: data.description ?? null,
+        level: data.level ?? null,
+        isPublic: data.isPublic ?? null,
+      }),
+    }),
 
   setProgress: (idOrSlug: string, status: 'NotStarted' | 'Active' | 'Completed') =>
     request<void>(`${API_BASE}/sets/${idOrSlug}/progress`, {

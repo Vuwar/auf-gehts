@@ -32,7 +32,18 @@ public class WordSetsController(WordSetService service) : BaseController
     {
         var userId = GetUserId();
         if (userId is null) return Unauthorized();
-        return Ok(await service.CreateAsync(req, userId.Value));
+        var (response, error) = await service.CreateAsync(req, userId.Value);
+        if (response is null) return BadRequest(new { error });
+        return Ok(response);
+    }
+
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<WordSetResponse>> Update(Guid id, [FromBody] UpdateWordSetRequest req)
+    {
+        var userId = GetUserId();
+        if (userId is null) return Unauthorized();
+        var updated = await service.UpdateAsync(id, req, userId.Value);
+        return updated is null ? NotFound() : Ok(updated);
     }
 
     [HttpDelete("{id:guid}")]

@@ -21,7 +21,7 @@ public class WordSetRepository(AppDbContext db) : IWordSetRepository
     {
         var rows = await db.WordSets
             .Include(s => s.Week)
-            .Where(s => s.OwnerUserId == userId)
+            .Where(s => s.CreatedByUserId == userId)
             .OrderByDescending(s => s.CreatedAt)
             .Select(s => new { Set = s, WordCount = s.Words.Count })
             .ToListAsync();
@@ -39,7 +39,7 @@ public class WordSetRepository(AppDbContext db) : IWordSetRepository
 
     public Task<WordSet?> GetVocabSetForUserAsync(Guid userId) =>
         db.WordSets.FirstOrDefaultAsync(s =>
-            s.OwnerUserId == userId && !s.IsPublic && s.WeekId == null && s.Name == "My Vocabulary");
+            s.CreatedByUserId == userId && !s.IsPublic && s.WeekId == null && s.Name == "My Vocabulary");
 
     public async Task<WordSet> AddAsync(WordSet set)
     {

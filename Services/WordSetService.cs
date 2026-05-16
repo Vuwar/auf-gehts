@@ -12,26 +12,32 @@ namespace Api.Services;
 public class WordSetService(
     IWordSetRepository sets,
     IProgressRepository progress,
+    CurrentUserAccessor currentUser,
     AppDbContext db)
 {
     public async Task<LibraryResponse> ListForLibraryAsync(Guid userId)
     {
-        // 1 query: all user progress with sets + weeks
         var userProgress = await db.UserSetProgress
             .Include(p => p.WordSet).ThenInclude(s => s.Week)
             .Where(p => p.UserId == userId)
             .OrderByDescending(p => p.LastReviewedAt)
             .ToListAsync();
 
-        // 1 query: all owned sets with weeks + word counts via subquery
         var ownedRaw = await db.WordSets
             .Include(s => s.Week)
-            .Where(s => s.OwnerUserId == userId)
+            .Where(s => s.CreatedByUserId == userId)
             .OrderByDescending(s => s.CreatedAt)
             .Select(s => new { Set = s, WordCount = s.Words.Count })
             .ToListAsync();
 
-        // 1 query: all word counts for sets in progress
+        var vocab = await sets.GetVocabSetForUserAsync(userId);
+        var mineRaw = ownedRaw.ToList();
+        if (vocab is not null && !mineRaw.Any(r => r.Set.Id == vocab.Id))
+        {
+            var vocabCount = await db.Words.CountAsync(w => w.WordSetId == vocab.Id);
+            mineRaw.Add(new { Set = vocab, WordCount = vocabCount });
+        }
+
         var progressSetIds = userProgress.Select(p => p.WordSetId).ToList();
         var progressCounts = progressSetIds.Count == 0
             ? new Dictionary<Guid, int>()
@@ -50,11 +56,26 @@ public class WordSetService(
             .ToList();
 
         var progressMap = userProgress.ToDictionary(p => p.WordSetId, p => p.Status);
-        var mine = ownedRaw.Select(r => r.Set.ToResponse(userId, r.WordCount,
+        var mine = mineRaw.Select(r => r.Set.ToResponse(userId, r.WordCount,
             progressMap.GetValueOrDefault(r.Set.Id, ProgressStatus.NotStarted)
         )).ToList();
 
-        return new LibraryResponse(active, completed, mine);
+        // Browse: public user-created sets (not official, not yours, not in progress)
+        var progressIds = progressMap.Keys.ToHashSet();
+        var browseRaw = await db.WordSets
+            .Include(s => s.Week)
+            .Where(s => s.IsPublic
+                && !s.IsOfficial
+                && s.CreatedByUserId != userId
+                && !progressIds.Contains(s.Id))
+            .OrderByDescending(s => s.CreatedAt)
+            .Select(s => new { Set = s, WordCount = s.Words.Count })
+            .ToListAsync();
+        var browse = browseRaw
+            .Select(r => r.Set.ToResponse(userId, r.WordCount, ProgressStatus.NotStarted))
+            .ToList();
+
+        return new LibraryResponse(active, completed, mine, browse);
     }
 
     public async Task<WordSetResponse?> GetAsync(Guid id, Guid userId)
@@ -75,35 +96,42 @@ public class WordSetService(
             ? await sets.GetByIdAsync(id)
             : await sets.GetBySlugAsync(idOrSlug);
         if (set is null) return null;
-        if (!set.IsPublic && set.OwnerUserId != userId) return null;
+        if (!set.IsPublic && set.CreatedByUserId != userId) return null;
         return set;
     }
 
     private async Task<WordSetResponse?> BuildResponse(WordSet? set, Guid userId)
     {
         if (set is null) return null;
-        if (!set.IsPublic && set.OwnerUserId != userId) return null;
+        if (!set.IsPublic && set.CreatedByUserId != userId) return null;
         var count = await db.Words.CountAsync(w => w.WordSetId == set.Id);
         var prog = await progress.GetAsync(userId, set.Id);
         return set.ToResponse(userId, count, prog?.Status ?? ProgressStatus.NotStarted);
     }
 
-    public async Task<WordSetResponse> CreateAsync(CreateWordSetRequest req, Guid userId)
+    public async Task<(WordSetResponse? Response, string? Error)> CreateAsync(CreateWordSetRequest req, Guid userId)
     {
+        var user = await currentUser.GetAsync();
+        if (user is null) return (null, "User not found");
+        if (user.Role == UserRole.ViewOnly) return (null, "Read-only account");
+
+        var isOfficial = req.IsOfficial && user.Role == UserRole.Admin;
+        var weekId = (user.Role == UserRole.Admin) ? req.WeekId : null;
+
         var slug = await GenerateUniqueSlugAsync(req.Name);
         var set = new WordSet
         {
             Slug = slug,
-            WeekId = req.WeekId,
+            WeekId = weekId,
             Name = req.Name,
             Description = req.Description,
             Level = req.Level,
             IsPublic = req.IsPublic,
-            OwnerUserId = req.IsPublic ? null : userId,
+            IsOfficial = isOfficial,
             CreatedByUserId = userId,
         };
         await sets.AddAsync(set);
-        return set.ToResponse(userId, 0);
+        return (set.ToResponse(userId, 0), null);
     }
 
     private async Task<string> GenerateUniqueSlugAsync(string name)
@@ -119,11 +147,31 @@ public class WordSetService(
         return slug;
     }
 
+    public async Task<WordSetResponse?> UpdateAsync(Guid id, UpdateWordSetRequest req, Guid userId)
+    {
+        var user = await currentUser.GetAsync();
+        if (user?.Role == UserRole.ViewOnly) return null;
+        var set = await sets.GetByIdAsync(id);
+        if (set is null) return null;
+        if (user?.Role != UserRole.Admin && set.CreatedByUserId != userId) return null;
+
+        if (req.Name is not null && req.Name.Trim().Length > 0) set.Name = req.Name.Trim();
+        if (req.Description is not null) set.Description = req.Description;
+        if (req.Level is not null) set.Level = req.Level;
+        if (req.IsPublic.HasValue) set.IsPublic = req.IsPublic.Value;
+        await sets.SaveAsync();
+        var count = await db.Words.CountAsync(w => w.WordSetId == set.Id);
+        var prog = await progress.GetAsync(userId, set.Id);
+        return set.ToResponse(userId, count, prog?.Status ?? ProgressStatus.NotStarted);
+    }
+
     public async Task<bool> DeleteAsync(Guid id, Guid userId)
     {
+        var user = await currentUser.GetAsync();
+        if (user?.Role == UserRole.ViewOnly) return false;
         var set = await sets.GetByIdAsync(id);
         if (set is null) return false;
-        if (set.CreatedByUserId != userId && set.OwnerUserId != userId) return false;
+        if (user?.Role != UserRole.Admin && set.CreatedByUserId != userId) return false;
         await sets.DeleteAsync(set);
         return true;
     }
@@ -136,9 +184,9 @@ public class WordSetService(
         var vocab = new WordSet
         {
             Slug = slug,
-            OwnerUserId = userId,
             CreatedByUserId = userId,
             IsPublic = false,
+            IsOfficial = false,
             Name = "My Vocabulary",
             Description = "Words you saved from the Reader."
         };
@@ -149,5 +197,6 @@ public class WordSetService(
 public record LibraryResponse(
     List<WordSetResponse> Active,
     List<WordSetResponse> Completed,
-    List<WordSetResponse> Mine
+    List<WordSetResponse> Mine,
+    List<WordSetResponse> Browse
 );

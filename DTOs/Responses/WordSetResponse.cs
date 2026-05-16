@@ -9,6 +9,7 @@ public record WordSetResponse(
     string? Description,
     string? Level,
     bool IsPublic,
+    bool IsOfficial,
     bool IsOwner,
     int WordCount,
     string ProgressStatus,

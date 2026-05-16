@@ -45,16 +45,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.HasIndex(e => e.Slug).IsUnique();
             entity.HasIndex(e => e.WeekId);
-            entity.HasIndex(e => e.OwnerUserId);
+            entity.HasIndex(e => e.CreatedByUserId);
             entity.HasIndex(e => e.IsPublic);
+            entity.HasIndex(e => e.IsOfficial);
             entity.HasOne(e => e.Week)
                   .WithMany(w => w.WordSets)
                   .HasForeignKey(e => e.WeekId)
                   .OnDelete(DeleteBehavior.SetNull);
             entity.HasOne<User>()
                   .WithMany()
-                  .HasForeignKey(e => e.OwnerUserId)
-                  .OnDelete(DeleteBehavior.Cascade);
+                  .HasForeignKey(e => e.CreatedByUserId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<Word>(entity =>

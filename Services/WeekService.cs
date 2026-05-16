@@ -16,9 +16,9 @@ public class WeekService(
         // 1 query: weeks
         var all = await weeks.GetAllAsync();
 
-        // 1 query: all set IDs per week
+        // 1 query: all official set IDs per week
         var setsByWeek = await db.WordSets
-            .Where(s => s.WeekId != null)
+            .Where(s => s.WeekId != null && s.IsOfficial)
             .Select(s => new { s.Id, WeekId = s.WeekId!.Value })
             .ToListAsync();
 
@@ -43,7 +43,7 @@ public class WeekService(
         if (week is null) return null;
         var sets = await db.WordSets
             .Include(s => s.Week)
-            .Where(s => s.WeekId == id)
+            .Where(s => s.WeekId == id && s.IsOfficial)
             .OrderBy(s => s.DisplayOrder)
             .ThenBy(s => s.CreatedAt)
             .Select(s => new { Set = s, WordCount = s.Words.Count })

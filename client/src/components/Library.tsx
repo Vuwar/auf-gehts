@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type Library as LibraryData, type Week, type WordSet } from '../api'
+import { useAuth } from '../auth'
 
 export default function Library() {
   const nav = useNavigate()
+  const { profile } = useAuth()
+  const isAdmin = profile?.role === 'Admin'
+  const canCreate = profile?.role !== 'ViewOnly'
+
   const [data, setData] = useState<LibraryData | null>(null)
   const [weeks, setWeeks] = useState<Week[]>([])
   const [loading, setLoading] = useState(true)
@@ -13,6 +18,7 @@ export default function Library() {
   const [newLevel, setNewLevel] = useState('A1')
   const [newWeekId, setNewWeekId] = useState<string>('')
   const [newIsPublic, setNewIsPublic] = useState(false)
+  const [newIsOfficial, setNewIsOfficial] = useState(false)
 
   useEffect(() => { load() }, [])
 
@@ -28,14 +34,15 @@ export default function Library() {
     e.preventDefault()
     if (!newName.trim()) return
     const set = await api.createSet({
-      weekId: newWeekId || undefined,
+      weekId: isAdmin ? (newWeekId || undefined) : undefined,
       name: newName.trim(),
       description: newDesc.trim() || undefined,
       level: newLevel,
       isPublic: newIsPublic,
+      isOfficial: isAdmin && newIsOfficial,
     })
     setCreating(false)
-    setNewName(''); setNewDesc(''); setNewWeekId(''); setNewLevel('A1'); setNewIsPublic(false)
+    setNewName(''); setNewDesc(''); setNewWeekId(''); setNewLevel('A1'); setNewIsPublic(false); setNewIsOfficial(false)
     nav(`/sets/${set.slug}`)
   }
 
@@ -45,19 +52,15 @@ export default function Library() {
     <div className="deck">
       <div className="deck-header">
         <h1>Library</h1>
-        <button onClick={() => setCreating(!creating)} className="deck-btn primary">
-          {creating ? 'Cancel' : '+ Create set'}
-        </button>
+        {canCreate && (
+          <button onClick={() => setCreating(!creating)} className="deck-btn primary">
+            {creating ? 'Cancel' : '+ Create set'}
+          </button>
+        )}
       </div>
 
       {creating && (
         <form onSubmit={createSet} className="form-row">
-          <span className="card-label">Week (optional)</span>
-          <select value={newWeekId} onChange={e => setNewWeekId(e.target.value)}>
-            <option value="">— no week —</option>
-            {weeks.map(w => <option key={w.id} value={w.id}>Woche {w.number}: {w.title}</option>)}
-          </select>
-
           <span className="card-label">Name</span>
           <input type="text" value={newName} onChange={e => setNewName(e.target.value)} required />
 
@@ -76,6 +79,20 @@ export default function Library() {
             <span>Public (visible to everyone)</span>
           </label>
 
+          {isAdmin && (
+            <>
+              <span className="card-label">Admin: assign to week</span>
+              <select value={newWeekId} onChange={e => setNewWeekId(e.target.value)}>
+                <option value="">— no week —</option>
+                {weeks.map(w => <option key={w.id} value={w.id}>Woche {w.number}: {w.title}</option>)}
+              </select>
+              <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input type="checkbox" checked={newIsOfficial} onChange={e => setNewIsOfficial(e.target.checked)} />
+                <span>Make official (appears in Abenteuer week)</span>
+              </label>
+            </>
+          )}
+
           <button type="submit" className="deck-btn primary">Create</button>
         </form>
       )}
@@ -83,6 +100,7 @@ export default function Library() {
       <Section title="Active" sets={data.active} emptyMsg="No sets in progress. Start studying from Abenteuer." onClick={(s) => nav(`/sets/${s.slug}`)} />
       <Section title="Completed" sets={data.completed} emptyMsg="No completed sets yet." onClick={(s) => nav(`/sets/${s.slug}`)} />
       <Section title="My sets" sets={data.mine} emptyMsg="You haven't created any sets yet." onClick={(s) => nav(`/sets/${s.slug}`)} />
+      <Section title="Browse sets" sets={data.browse} emptyMsg="No other public sets right now." onClick={(s) => nav(`/sets/${s.slug}`)} />
     </div>
   )
 }

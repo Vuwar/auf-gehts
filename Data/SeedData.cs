@@ -133,6 +133,7 @@ public static class SeedData
                 Description = s.Desc,
                 DisplayOrder = s.Order,
                 IsPublic = true,
+                IsOfficial = true,
             };
             await db.WordSets.AddAsync(set);
             await db.SaveChangesAsync();

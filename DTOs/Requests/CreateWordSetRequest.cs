@@ -5,5 +5,6 @@ public record CreateWordSetRequest(
     string Name,
     string? Description,
     string? Level,
-    bool IsPublic
+    bool IsPublic,
+    bool IsOfficial = false
 );
