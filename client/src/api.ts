@@ -91,24 +91,52 @@ export interface UserProfile {
   lastSeenAt: string
 }
 
+export class ApiError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const { data: sessionData } = await supabase.auth.getSession()
   const token = sessionData.session?.access_token
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options?.headers,
-    },
-  })
-  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`)
+  let res: Response
+  try {
+    res = await fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options?.headers,
+      },
+    })
+  } catch {
+    throw new ApiError('Network error', 0)
+  }
+  if (!res.ok) {
+    let msg = res.statusText || `HTTP ${res.status}`
+    try {
+      const body = await res.text()
+      if (body) {
+        try {
+          const json = JSON.parse(body)
+          msg = json.error ?? json.title ?? json.message ?? body
+        } catch {
+          msg = body
+        }
+      }
+    } catch {}
+    throw new ApiError(msg, res.status)
+  }
   if (res.status === 204) return undefined as T
   return res.json()
 }
 
 export const api = {
   getStats: () => request<Stats>(`${API_BASE}/stats`),
+  getDashboard: () => request<{ stats: Stats; weeks: Week[] }>(`${API_BASE}/dashboard`),
 
   listWeeks: () => request<Week[]>(`${API_BASE}/weeks`),
   getWeek: (idOrNumber: string | number) => request<WeekDetail>(`${API_BASE}/weeks/${idOrNumber}`),
@@ -128,7 +156,7 @@ export const api = {
       }),
     }),
   deleteSet: (id: string) => request<void>(`${API_BASE}/sets/${id}`, { method: 'DELETE' }),
-  updateSet: (id: string, data: { name?: string; description?: string; level?: string; isPublic?: boolean }) =>
+  updateSet: (id: string, data: { name?: string; description?: string; level?: string; isPublic?: boolean; weekId?: string | null; isOfficial?: boolean; clearWeek?: boolean }) =>
     request<WordSet>(`${API_BASE}/sets/${id}`, {
       method: 'PUT',
       body: JSON.stringify({
@@ -136,6 +164,9 @@ export const api = {
         description: data.description ?? null,
         level: data.level ?? null,
         isPublic: data.isPublic ?? null,
+        weekId: data.weekId ?? null,
+        isOfficial: data.isOfficial ?? null,
+        clearWeek: data.clearWeek ?? false,
       }),
     }),
 
@@ -157,6 +188,11 @@ export const api = {
       body: JSON.stringify(items),
     }),
   deleteWord: (id: string) => request<void>(`${API_BASE}/words/${id}`, { method: 'DELETE' }),
+  updateWord: (id: string, front: string, back: string, context?: string) =>
+    request<Word>(`${API_BASE}/words/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ front, back, context: context ?? null }),
+    }),
 
   saveToVocab: (front: string, back: string, context?: string) =>
     request<Word>(`${API_BASE}/vocab/save`, {
@@ -181,6 +217,12 @@ export const api = {
         displayName: displayName ?? null,
         anthropicApiKey: anthropicApiKey ?? null,
       }),
+    }),
+  adminListUsers: () => request<UserProfile[]>(`${API_BASE}/admin/users`),
+  adminSetUserRole: (id: string, role: UserRole) =>
+    request<UserProfile>(`${API_BASE}/admin/users/${id}/role`, {
+      method: 'PUT',
+      body: JSON.stringify({ role }),
     }),
 }
 

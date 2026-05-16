@@ -19,7 +19,8 @@ public class WordSetService(
     {
         var userProgress = await db.UserSetProgress
             .Include(p => p.WordSet).ThenInclude(s => s.Week)
-            .Where(p => p.UserId == userId)
+            .Where(p => p.UserId == userId
+                && (p.WordSet.IsPublic || p.WordSet.CreatedByUserId == userId))
             .OrderByDescending(p => p.LastReviewedAt)
             .ToListAsync();
 
@@ -159,6 +160,14 @@ public class WordSetService(
         if (req.Description is not null) set.Description = req.Description;
         if (req.Level is not null) set.Level = req.Level;
         if (req.IsPublic.HasValue) set.IsPublic = req.IsPublic.Value;
+
+        if (user?.Role == UserRole.Admin)
+        {
+            if (req.ClearWeek) set.WeekId = null;
+            else if (req.WeekId.HasValue) set.WeekId = req.WeekId.Value;
+            if (req.IsOfficial.HasValue) set.IsOfficial = req.IsOfficial.Value;
+        }
+
         await sets.SaveAsync();
         var count = await db.Words.CountAsync(w => w.WordSetId == set.Id);
         var prog = await progress.GetAsync(userId, set.Id);

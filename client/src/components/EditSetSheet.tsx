@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { api, parseBulkText, type Word, type WordSet } from '../api'
+import { api, parseBulkText, type Week, type Word, type WordSet } from '../api'
+import { useAuth } from '../auth'
 
 interface Props {
   set: WordSet
@@ -11,12 +12,21 @@ interface Props {
 }
 
 export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWordsChanged, onDeleted }: Props) {
+  const { profile } = useAuth()
+  const isAdmin = profile?.role === 'Admin'
+  const [weeks, setWeeks] = useState<Week[]>([])
   const [name, setName] = useState(set.name)
   const [savingName, setSavingName] = useState(false)
+  const [isPublic, setIsPublic] = useState(set.isPublic)
+  const [togglingPublic, setTogglingPublic] = useState(false)
   const [newFront, setNewFront] = useState('')
   const [newBack, setNewBack] = useState('')
   const [showBulk, setShowBulk] = useState(false)
   const [bulkText, setBulkText] = useState('')
+
+  const [addOpen, setAddOpen] = useState(false)
+  const [wordsOpen, setWordsOpen] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -28,6 +38,22 @@ export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWord
     }
   }, [onClose])
 
+  useEffect(() => {
+    if (isAdmin) api.listWeeks().then(setWeeks).catch(() => {})
+  }, [isAdmin])
+
+  const setWeek = async (weekId: string) => {
+    const updated = weekId
+      ? await api.updateSet(set.id, { weekId })
+      : await api.updateSet(set.id, { clearWeek: true })
+    onSetUpdated(updated)
+  }
+
+  const toggleOfficial = async () => {
+    const updated = await api.updateSet(set.id, { isOfficial: !set.isOfficial })
+    onSetUpdated(updated)
+  }
+
   const saveName = async () => {
     if (name.trim() === set.name || !name.trim()) return
     setSavingName(true)
@@ -36,6 +62,18 @@ export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWord
       onSetUpdated(updated)
     } finally {
       setSavingName(false)
+    }
+  }
+
+  const togglePublic = async () => {
+    setTogglingPublic(true)
+    try {
+      const next = !isPublic
+      const updated = await api.updateSet(set.id, { isPublic: next })
+      setIsPublic(next)
+      onSetUpdated(updated)
+    } finally {
+      setTogglingPublic(false)
     }
   }
 
@@ -62,7 +100,6 @@ export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWord
   }
 
   const deleteSet = async () => {
-    if (!confirm('Delete this set permanently? All words will be lost.')) return
     await api.deleteSet(set.id)
     onDeleted()
   }
@@ -77,7 +114,7 @@ export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWord
 
         <div className="sheet-body">
           <div className="form-row">
-            <span className="card-label">Set name</span>
+            <span className="card-label">Change name</span>
             <div style={{ display: 'flex', gap: '8px' }}>
               <input type="text" value={name} onChange={e => setName(e.target.value)} style={{ flex: 1 }} />
               <button onClick={saveName} disabled={savingName || name.trim() === set.name || !name.trim()} className="deck-btn primary">
@@ -86,52 +123,169 @@ export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWord
             </div>
           </div>
 
-          <div className="tab-toggle">
-            <button onClick={() => setShowBulk(false)} className={`tab-toggle-btn ${!showBulk ? 'active' : ''}`}>Single Add</button>
-            <button onClick={() => setShowBulk(true)} className={`tab-toggle-btn ${showBulk ? 'active' : ''}`}>Bulk Add</button>
-          </div>
+          <button onClick={togglePublic} disabled={togglingPublic} className="visibility-toggle">
+            <div className="visibility-toggle-text">
+              <span className="visibility-toggle-title">{isPublic ? 'Public' : 'Private'}</span>
+              <span className="visibility-toggle-sub">{isPublic ? 'Anyone can see this set' : 'Only you can see this set'}</span>
+            </div>
+            <span className={`visibility-switch ${isPublic ? 'on' : ''}`}>
+              <span className="visibility-switch-knob" />
+            </span>
+          </button>
 
-          {!showBulk ? (
-            <form onSubmit={addWord} className="form-row">
-              <input type="text" placeholder="German" value={newFront} onChange={e => setNewFront(e.target.value)} />
-              <input type="text" placeholder="English" value={newBack} onChange={e => setNewBack(e.target.value)} />
-              <button type="submit" className="deck-btn primary">Add word</button>
-            </form>
-          ) : (
-            <div className="form-row">
-              <p className="hint">One per line. Format: German - English</p>
-              <textarea rows={6} value={bulkText} onChange={e => setBulkText(e.target.value)} placeholder="der Hund - the dog" />
-              <button onClick={bulkAdd} className="deck-btn primary">Save all</button>
+          {isAdmin && (
+            <div className="form-row" style={{ borderColor: 'var(--accent-border)' }}>
+              <span className="card-label" style={{ color: 'var(--accent)' }}>Admin</span>
+
+              <button onClick={toggleOfficial} type="button" className="visibility-toggle">
+                <div className="visibility-toggle-text">
+                  <span className="visibility-toggle-title">Official set</span>
+                  <span className="visibility-toggle-sub">Shows in Abenteuer week page</span>
+                </div>
+                <span className={`visibility-switch ${set.isOfficial ? 'on' : ''}`}>
+                  <span className="visibility-switch-knob" />
+                </span>
+              </button>
+
+              {set.isOfficial && (
+                <>
+                  <span className="card-label">Assign to week</span>
+                  <select value={set.weekId ?? ''} onChange={e => setWeek(e.target.value)}>
+                    <option value="">Choose a week</option>
+                    {weeks.map(w => <option key={w.id} value={w.id}>Woche {w.number}: {w.title}</option>)}
+                  </select>
+                </>
+              )}
             </div>
           )}
 
-          <div>
-            <span className="card-label" style={{ display: 'block', marginBottom: '8px' }}>Words ({words.length})</span>
-            {words.length === 0 ? (
-              <p className="empty-state" style={{ padding: '12px' }}>No words yet.</p>
-            ) : (
-              <ul className="word-list">
-                {words.map(w => (
-                  <li key={w.id} className="word-card">
-                    <div className="word-card-body">
-                      <div className="word-card-front">{w.front}</div>
-                      <div className="word-card-back">{w.back}</div>
-                    </div>
-                    <button onClick={() => deleteWord(w.id)} className="word-card-delete" aria-label="Delete word">
-                      <TrashIcon />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <button onClick={deleteSet} className="deck-btn danger" style={{ marginTop: '8px', width: '100%', display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
-            <TrashIcon /> Delete set
+          <button onClick={() => setAddOpen(!addOpen)} className="collapse-toggle">
+            <span>Add words</span>
+            <ChevronIcon open={addOpen} />
           </button>
+          {addOpen && (
+            <div className="collapse-content">
+              <div className="tab-toggle">
+                <button onClick={() => setShowBulk(false)} className={`tab-toggle-btn ${!showBulk ? 'active' : ''}`}>Single</button>
+                <button onClick={() => setShowBulk(true)} className={`tab-toggle-btn ${showBulk ? 'active' : ''}`}>Multiple</button>
+              </div>
+              {!showBulk ? (
+                <form onSubmit={addWord} className="form-row">
+                  <input type="text" placeholder="German" value={newFront} onChange={e => setNewFront(e.target.value)} />
+                  <input type="text" placeholder="English" value={newBack} onChange={e => setNewBack(e.target.value)} />
+                  <button type="submit" className="deck-btn primary">Add word</button>
+                </form>
+              ) : (
+                <div className="form-row">
+                  <p className="hint">One per line. Format: German - English</p>
+                  <textarea rows={6} value={bulkText} onChange={e => setBulkText(e.target.value)} placeholder="der Hund - the dog" />
+                  <button onClick={bulkAdd} className="deck-btn primary">Save all</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          <button onClick={() => setWordsOpen(!wordsOpen)} className="collapse-toggle sticky-toggle">
+            <span>Words ({words.length})</span>
+            <ChevronIcon open={wordsOpen} />
+          </button>
+          {wordsOpen && (
+            <div className="collapse-content">
+              {words.length === 0 ? (
+                <p className="empty-state" style={{ padding: '12px' }}>No words yet.</p>
+              ) : (
+                <ul className="word-list">
+                  {words.map(w => (
+                    <EditableWordRow
+                      key={w.id}
+                      word={w}
+                      onSave={async (front, back) => {
+                        const updated = await api.updateWord(w.id, front, back, w.context ?? undefined)
+                        onWordsChanged(words.map(x => x.id === w.id ? updated : x))
+                      }}
+                      onDelete={() => deleteWord(w.id)}
+                    />
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {set.name === 'My Vocabulary' ? null : !confirmingDelete ? (
+            <button onClick={() => setConfirmingDelete(true)} className="deck-btn danger" style={{ marginTop: '8px', width: '100%', display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
+              <TrashIcon /> Delete set
+            </button>
+          ) : (
+            <div className="confirm-row">
+              <div className="confirm-actions">
+                <button onClick={() => setConfirmingDelete(false)} className="deck-btn cancel-btn">Cancel</button>
+                <button onClick={deleteSet} className="deck-btn danger-solid">
+                  <TrashIcon /> Delete
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
+  )
+}
+
+function EditableWordRow({ word, onSave, onDelete }: { word: Word; onSave: (front: string, back: string) => Promise<void>; onDelete: () => void }) {
+  const [editing, setEditing] = useState(false)
+  const [front, setFront] = useState(word.front)
+  const [back, setBack] = useState(word.back)
+  const [saving, setSaving] = useState(false)
+
+  const save = async () => {
+    if (!front.trim() || !back.trim()) return
+    if (front === word.front && back === word.back) { setEditing(false); return }
+    setSaving(true)
+    try {
+      await onSave(front.trim(), back.trim())
+      setEditing(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const cancel = () => {
+    setFront(word.front); setBack(word.back); setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <li className="word-card word-card-editing">
+        <div className="word-card-body">
+          <input value={front} onChange={e => setFront(e.target.value)} />
+          <input value={back} onChange={e => setBack(e.target.value)} />
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={save} disabled={saving} className="deck-btn primary" style={{ flex: 1 }}>{saving ? '...' : 'Save'}</button>
+            <button onClick={cancel} className="deck-btn">Cancel</button>
+          </div>
+        </div>
+      </li>
+    )
+  }
+
+  return (
+    <li className="word-card" onClick={() => setEditing(true)} style={{ cursor: 'pointer' }}>
+      <div className="word-card-body">
+        <div className="word-card-front">{word.front}</div>
+        <div className="word-card-back">{word.back}</div>
+      </div>
+      <button onClick={(e) => { e.stopPropagation(); onDelete() }} className="word-card-delete" aria-label="Delete word">
+        <TrashIcon />
+      </button>
+    </li>
+  )
+}
+
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
   )
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type Stats, type Week } from '../api'
 import { useAuth } from '../auth'
+import ErrorView from './ErrorView'
 
 export default function Dashboard() {
   const { user, profile } = useAuth()
@@ -9,15 +10,23 @@ export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [weeks, setWeeks] = useState<Week[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<unknown>(null)
   const nav = useNavigate()
 
-  useEffect(() => {
-    Promise.all([api.getStats(), api.listWeeks()])
-      .then(([s, w]) => { setStats(s); setWeeks(w) })
+  const load = () => {
+    setLoading(true)
+    setError(null)
+    api.getDashboard()
+      .then(({ stats: s, weeks: w }) => { setStats(s); setWeeks(w) })
+      .catch(e => setError(e))
       .finally(() => setLoading(false))
-  }, [])
+  }
 
-  if (loading || !stats) return <div className="deck"><p className="empty-state">Loading...</p></div>
+  useEffect(() => { load() }, [])
+
+  if (loading) return <div className="deck"><p className="empty-state">Loading...</p></div>
+  if (error) return <div className="deck"><ErrorView error={error} onRetry={load} /></div>
+  if (!stats) return null
 
   const currentWeek = weeks.find(w => w.completedCount < w.setCount) ?? weeks[weeks.length - 1]
 

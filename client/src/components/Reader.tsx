@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, type WordLookup } from '../api'
+import ErrorView from './ErrorView'
 
 type Mode = 'paste' | 'generate'
 
@@ -10,7 +11,7 @@ export default function Reader() {
   const [level, setLevel] = useState('A2')
   const [wordCount, setWordCount] = useState(150)
   const [generating, setGenerating] = useState(false)
-  const [generateError, setGenerateError] = useState<string | null>(null)
+  const [generateError, setGenerateError] = useState<unknown>(null)
   const [remaining, setRemaining] = useState<number | null>(null)
 
   const [selectedWord, setSelectedWord] = useState<string | null>(null)
@@ -32,8 +33,8 @@ export default function Reader() {
       const result = await api.generateText(topic.trim(), level, wordCount)
       setText(result.text)
       if (result.remainingToday >= 0) setRemaining(result.remainingToday)
-    } catch (e: any) {
-      setGenerateError(e.message)
+    } catch (e) {
+      setGenerateError(e)
     } finally {
       setGenerating(false)
     }
@@ -123,7 +124,7 @@ export default function Reader() {
             <button onClick={generate} disabled={generating || !topic.trim()} className="deck-btn primary">
               {generating ? 'Generating...' : 'Generate'}
             </button>
-            {generateError && <p style={{ color: 'var(--danger)', fontSize: '13px' }}>{generateError}</p>}
+            {generateError !== null && <ErrorView error={generateError} context="ai" compact onRetry={() => { setGenerateError(null); generate() }} />}
             {text && (
               <div className="form-row" style={{ marginTop: '8px' }}>
                 <p className="hint">Generated text:</p>

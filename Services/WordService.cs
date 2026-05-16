@@ -53,6 +53,21 @@ public class WordService(IWordRepository words, IWordSetRepository sets, Current
         return entities.Count;
     }
 
+    public async Task<WordResponse?> UpdateAsync(Guid id, CreateWordRequest req, Guid userId)
+    {
+        var user = await currentUser.GetAsync();
+        if (user?.Role == UserRole.ViewOnly) return null;
+        var word = await words.GetByIdAsync(id);
+        if (word is null) return null;
+        var set = await sets.GetByIdAsync(word.WordSetId);
+        if (set is null || !CanEdit(set, user)) return null;
+        word.Front = req.Front;
+        word.Back = req.Back;
+        if (req.Context is not null) word.Context = req.Context;
+        await words.SaveAsync();
+        return word.ToResponse();
+    }
+
     public async Task<bool> DeleteAsync(Guid id, Guid userId)
     {
         var user = await currentUser.GetAsync();

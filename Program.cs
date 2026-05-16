@@ -63,6 +63,7 @@ builder.Services.AddScoped<WordService>();
 builder.Services.AddScoped<VocabService>();
 builder.Services.AddScoped<ProgressService>();
 builder.Services.AddScoped<StatsService>();
+builder.Services.AddScoped<DashboardService>();
 builder.Services.AddScoped<DictionaryService>();
 builder.Services.AddScoped<AiService>();
 

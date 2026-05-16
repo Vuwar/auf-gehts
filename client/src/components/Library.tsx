@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type Library as LibraryData, type Week, type WordSet } from '../api'
 import { useAuth } from '../auth'
+import ErrorView from './ErrorView'
 
 export default function Library() {
   const nav = useNavigate()
@@ -12,6 +13,7 @@ export default function Library() {
   const [data, setData] = useState<LibraryData | null>(null)
   const [weeks, setWeeks] = useState<Week[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<unknown>(null)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [newDesc, setNewDesc] = useState('')
@@ -24,9 +26,12 @@ export default function Library() {
 
   const load = async () => {
     setLoading(true)
+    setError(null)
     try {
       const [lib, ws] = await Promise.all([api.getLibrary(), api.listWeeks()])
       setData(lib); setWeeks(ws)
+    } catch (e) {
+      setError(e)
     } finally { setLoading(false) }
   }
 
@@ -46,7 +51,9 @@ export default function Library() {
     nav(`/sets/${set.slug}`)
   }
 
-  if (loading || !data) return <div className="deck"><p className="empty-state">Loading...</p></div>
+  if (loading) return <div className="deck"><p className="empty-state">Loading...</p></div>
+  if (error) return <div className="deck"><ErrorView error={error} onRetry={load} /></div>
+  if (!data) return null
 
   return (
     <div className="deck">
@@ -99,7 +106,7 @@ export default function Library() {
 
       <Section title="Active" sets={data.active} emptyMsg="No sets in progress. Start studying from Abenteuer." onClick={(s) => nav(`/sets/${s.slug}`)} />
       <Section title="Completed" sets={data.completed} emptyMsg="No completed sets yet." onClick={(s) => nav(`/sets/${s.slug}`)} />
-      <Section title="My sets" sets={data.mine} emptyMsg="You haven't created any sets yet." onClick={(s) => nav(`/sets/${s.slug}`)} />
+      <Section title="My sets" sets={data.mine.filter(s => !(s.name === 'My Vocabulary' && s.wordCount === 0))} emptyMsg="You haven't created any sets yet." onClick={(s) => nav(`/sets/${s.slug}`)} />
       <Section title="Browse sets" sets={data.browse} emptyMsg="No other public sets right now." onClick={(s) => nav(`/sets/${s.slug}`)} />
     </div>
   )

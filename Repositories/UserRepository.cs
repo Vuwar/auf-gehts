@@ -17,4 +17,7 @@ public class UserRepository(AppDbContext db) : IUserRepository
     }
 
     public Task SaveAsync() => db.SaveChangesAsync();
+
+    public Task<List<User>> GetAllAsync() =>
+        db.Users.OrderBy(u => u.Email).ToListAsync();
 }

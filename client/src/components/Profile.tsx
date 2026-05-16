@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, type UserProfile } from '../api'
+import { api, type UserProfile, type UserRole } from '../api'
 
 export default function Profile() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -8,12 +8,22 @@ export default function Profile() {
   const [saving, setSaving] = useState(false)
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
 
+  const [users, setUsers] = useState<UserProfile[]>([])
+  const [usersLoading, setUsersLoading] = useState(false)
+
   useEffect(() => {
     api.getMe().then(p => {
       setProfile(p)
       setDisplayName(p.displayName ?? '')
+      if (p.role === 'Admin') loadUsers()
     })
   }, [])
+
+  const loadUsers = async () => {
+    setUsersLoading(true)
+    try { setUsers(await api.adminListUsers()) }
+    finally { setUsersLoading(false) }
+  }
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -37,6 +47,11 @@ export default function Profile() {
     setProfile(updated)
   }
 
+  const changeRole = async (id: string, role: UserRole) => {
+    const updated = await api.adminSetUserRole(id, role)
+    setUsers(users.map(u => u.id === id ? updated : u))
+  }
+
   if (!profile) return <p className="empty-state">Loading...</p>
 
   return (
@@ -48,6 +63,9 @@ export default function Profile() {
       <form onSubmit={save} className="form-row">
         <span className="card-label">Email</span>
         <p>{profile.email}</p>
+
+        <span className="card-label">Role</span>
+        <p>{profile.role}</p>
 
         <span className="card-label">Username</span>
         <input type="text" value={displayName} onChange={e => setDisplayName(e.target.value)} />
@@ -77,6 +95,35 @@ export default function Profile() {
         </button>
         {savedMsg && <p style={{ color: 'var(--accent)', fontSize: '13px', margin: 0 }}>{savedMsg}</p>}
       </form>
+
+      {profile.role === 'Admin' && (
+        <>
+          <h2 className="section-title">Admin · Users</h2>
+          {usersLoading ? (
+            <p className="hint">Loading users...</p>
+          ) : (
+            <ul className="deck-list">
+              {users.map(u => (
+                <li key={u.id} className="deck-item">
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                    <strong style={{ fontSize: '14px' }}>{u.displayName || '—'}</strong>
+                    <span className="hint" style={{ fontSize: '12px' }}>{u.email}</span>
+                  </div>
+                  <select
+                    value={u.role}
+                    onChange={e => changeRole(u.id, e.target.value as UserRole)}
+                    disabled={u.id === profile.id}
+                  >
+                    <option value="Admin">Admin</option>
+                    <option value="Default">Default</option>
+                    <option value="ViewOnly">ViewOnly</option>
+                  </select>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
     </div>
   )
 }

@@ -4,6 +4,8 @@ import { api, type Word, type WordSet } from '../api'
 import { useAuth } from '../auth'
 import FlashCard from './FlashCard'
 import EditSetSheet, { PenIcon } from './EditSetSheet'
+import HoldToConfirm from './HoldToConfirm'
+import ErrorView from './ErrorView'
 
 type View = 'list' | 'study'
 
@@ -13,6 +15,7 @@ export default function WordSetView() {
   const nav = useNavigate()
   const { profile } = useAuth()
   const canEdit = profile?.role !== 'ViewOnly'
+  const isAdmin = profile?.role === 'Admin'
   const [set, setSet] = useState<WordSet | null>(null)
   const [words, setWords] = useState<Word[]>([])
   const [view, setView] = useState<View>('list')
@@ -21,7 +24,7 @@ export default function WordSetView() {
   const [learnedIds, setLearnedIds] = useState<Set<string>>(new Set())
   const [missedIds, setMissedIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<unknown>(null)
 
   const [editOpen, setEditOpen] = useState(false)
   const [toast, setToast] = useState<{ message: string; undo?: () => void } | null>(null)
@@ -30,7 +33,7 @@ export default function WordSetView() {
     if (!setId) return
     Promise.all([api.getSet(setId), api.listWords(setId)])
       .then(([s, w]) => { setSet(s); setWords(w) })
-      .catch(e => setError(e.message))
+      .catch(e => setError(e))
       .finally(() => setLoading(false))
   }, [setId])
 
@@ -109,11 +112,12 @@ export default function WordSetView() {
     if (!setId || !set) return
     await api.setProgress(setId, 'Active')
     setSet({ ...set, progressStatus: 'Active' })
+    showToast('Reverted to active')
   }
 
 
   if (loading) return <div className="deck"><p className="empty-state">Loading...</p></div>
-  if (error) return <div className="deck"><p className="empty-state" style={{ color: 'var(--danger)' }}>{error}</p></div>
+  if (error) return <div className="deck"><ErrorView error={error} context="set" /></div>
   if (!set) return null
 
   if (view === 'study') {
@@ -206,10 +210,13 @@ export default function WordSetView() {
       <div>
         <button onClick={() => nav(-1)} className="deck-btn">← Back</button>
       </div>
-      <div className="deck-header">
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <h1 style={{ flex: 1, margin: 0 }}>{set.name}</h1>
+      <header className="set-header">
+        <div className="set-header-top">
+          <div className="set-header-title-block">
+            <h1>{set.name}</h1>
+            {set.description && <p className="set-subtitle">{set.description}</p>}
+          </div>
+          <div className="set-header-actions">
             <button
               onClick={toggleBookmark}
               className={`bookmark-btn ${set.progressStatus !== 'NotStarted' ? 'active' : ''}`}
@@ -219,34 +226,51 @@ export default function WordSetView() {
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
               </svg>
             </button>
+            {(set.isOwner || isAdmin) && canEdit && (
+              <button
+                onClick={() => setEditOpen(true)}
+                className="bookmark-btn"
+                aria-label="Edit set"
+              >
+                <PenIcon />
+              </button>
+            )}
           </div>
-          <p className="hint">
-            {set.weekNumber && <>Woche {set.weekNumber} · </>}
-            {set.level && <>{set.level} · </>}
-            {set.isPublic ? 'Public' : 'Private'} · {words.length} words
-            {set.progressStatus === 'Completed' && <span style={{ color: 'var(--accent)', marginLeft: '8px' }}>✓ Completed</span>}
-            {set.progressStatus === 'Active' && <span style={{ color: 'var(--accent)', marginLeft: '8px' }}>◐ In progress</span>}
-          </p>
-          {set.description && <p>{set.description}</p>}
         </div>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+
+        <div className="meta-pills">
+          {set.weekNumber && <span className="meta-pill">Woche {set.weekNumber}</span>}
+          {set.level && <span className="meta-pill">{set.level}</span>}
+          <span className="meta-pill">{set.isPublic ? 'Public' : 'Private'}</span>
+          <span className="meta-pill">{words.length} {words.length === 1 ? 'word' : 'words'}</span>
           {set.progressStatus === 'Completed' && (
-            <button onClick={markActive} className="deck-btn">Mark active again</button>
+            <HoldToConfirm onConfirm={markActive} hint="Hold to revert">
+              <span className="check-circle" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </span>
+              <span className="chip-label">Completed</span>
+            </HoldToConfirm>
           )}
-          {set.isOwner && canEdit && (
-            <button onClick={() => setEditOpen(true)} className="deck-btn" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-              <PenIcon /> Edit
-            </button>
+          {set.progressStatus === 'Active' && (
+            <span className="meta-pill meta-pill-active">◐ In progress</span>
           )}
         </div>
-      </div>
+      </header>
 
       {words.length > 0 && (
         <button onClick={startStudy} className="study-action">
           <span className="study-action-icon">🎴</span>
           <span className="study-action-body">
             <span className="study-action-title">Flashcards</span>
-            <span className="study-action-sub">Flip cards to test yourself · {words.length} word{words.length === 1 ? '' : 's'}</span>
+            <span className="study-action-sub">
+              {set.progressStatus === 'Completed'
+                ? `Review again · ${words.length} word${words.length === 1 ? '' : 's'}`
+                : set.progressStatus === 'Active'
+                  ? `Continue · ${words.length} word${words.length === 1 ? '' : 's'}`
+                  : `Start studying · ${words.length} word${words.length === 1 ? '' : 's'}`}
+            </span>
           </span>
           <span className="study-action-arrow">→</span>
         </button>

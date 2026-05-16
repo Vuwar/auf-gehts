@@ -47,6 +47,15 @@ public class WordsController(WordService service, WordSetService setService) : B
         return count is null ? NotFound() : Ok(new { count });
     }
 
+    [HttpPut("words/{id:guid}")]
+    public async Task<ActionResult<WordResponse>> Update(Guid id, [FromBody] CreateWordRequest req)
+    {
+        var userId = GetUserId();
+        if (userId is null) return Unauthorized();
+        var w = await service.UpdateAsync(id, req, userId.Value);
+        return w is null ? NotFound() : Ok(w);
+    }
+
     [HttpDelete("words/{id:guid}")]
     public async Task<IActionResult> Delete(Guid id)
     {
