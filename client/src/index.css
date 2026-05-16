@@ -86,3 +86,8 @@ textarea {
 button {
   font: inherit;
 }
+
+* {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
