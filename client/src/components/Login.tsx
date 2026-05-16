@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useAuth } from '../auth'
+import { api } from '../api'
 
 export default function Login() {
   const { signIn, signUp } = useAuth()
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
+  const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -14,8 +16,15 @@ export default function Login() {
     setError(null)
     setSubmitting(true)
     try {
-      if (mode === 'signin') await signIn(email, password)
-      else await signUp(email, password)
+      if (mode === 'signin') {
+        await signIn(email, password)
+      } else {
+        await signUp(email, password)
+        if (displayName.trim()) {
+          try { await api.updateMe(displayName.trim()) }
+          catch (e) { console.error('Failed to set display name', e) }
+        }
+      }
     } catch (e: any) {
       setError(e.message || 'Something went wrong')
     } finally {
@@ -30,6 +39,15 @@ export default function Login() {
         <p className="auth-subtitle">{mode === 'signin' ? 'Welcome back' : 'Create your account'}</p>
 
         <form onSubmit={submit} className="auth-form">
+          {mode === 'signup' && (
+            <input
+              type="text"
+              placeholder="Display name"
+              value={displayName}
+              onChange={e => setDisplayName(e.target.value)}
+              autoComplete="name"
+            />
+          )}
           <input
             type="email"
             placeholder="Email"
