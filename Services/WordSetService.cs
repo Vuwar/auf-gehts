@@ -48,20 +48,39 @@ public class WordSetService(
                 .Select(g => new { Id = g.Key, Count = g.Count() })
                 .ToDictionaryAsync(x => x.Id, x => x.Count);
 
-        var active = userProgress.Where(p => p.Status == ProgressStatus.Active)
-            .Select(p => p.WordSet.ToResponse(userId, progressCounts.GetValueOrDefault(p.WordSetId, 0), p.Status))
+        var progressMap = userProgress.ToDictionary(p => p.WordSetId, p => p);
+        var favoriteIds = userProgress.Where(p => p.IsFavorite).Select(p => p.WordSetId).ToHashSet();
+
+        var favorites = userProgress
+            .Where(p => p.IsFavorite)
+            .Select(p => p.WordSet.ToResponse(userId,
+                progressCounts.GetValueOrDefault(p.WordSetId, 0),
+                p.Status,
+                true))
             .ToList();
 
-        var completed = userProgress.Where(p => p.Status == ProgressStatus.Completed)
-            .Select(p => p.WordSet.ToResponse(userId, progressCounts.GetValueOrDefault(p.WordSetId, 0), p.Status))
+        var completed = userProgress
+            .Where(p => p.Status == ProgressStatus.Completed)
+            .Select(p => p.WordSet.ToResponse(userId,
+                progressCounts.GetValueOrDefault(p.WordSetId, 0),
+                p.Status,
+                p.IsFavorite))
             .ToList();
 
-        var progressMap = userProgress.ToDictionary(p => p.WordSetId, p => p.Status);
-        var mine = mineRaw.Select(r => r.Set.ToResponse(userId, r.WordCount,
-            progressMap.GetValueOrDefault(r.Set.Id, ProgressStatus.NotStarted)
-        )).ToList();
+        // My sets exclude favorited (dedupe — favorited owned shows in Favorites only)
+        var mine = mineRaw
+            .Where(r => !favoriteIds.Contains(r.Set.Id))
+            .Select(r =>
+            {
+                var p = progressMap.GetValueOrDefault(r.Set.Id);
+                return r.Set.ToResponse(userId, r.WordCount,
+                    p?.Status ?? ProgressStatus.NotStarted,
+                    p?.IsFavorite ?? false);
+            })
+            .ToList();
 
-        // Browse: public user-created sets (not official, not yours, not in progress)
+        // Browse: public, not mine, not favorited, no progress
+        var ownedIds = ownedRaw.Select(r => r.Set.Id).ToHashSet();
         var progressIds = progressMap.Keys.ToHashSet();
         var browseRaw = await db.WordSets
             .Include(s => s.Week)
@@ -73,10 +92,11 @@ public class WordSetService(
             .Select(s => new { Set = s, WordCount = s.Words.Count })
             .ToListAsync();
         var browse = browseRaw
-            .Select(r => r.Set.ToResponse(userId, r.WordCount, ProgressStatus.NotStarted))
+            .Where(r => !ownedIds.Contains(r.Set.Id))
+            .Select(r => r.Set.ToResponse(userId, r.WordCount, ProgressStatus.NotStarted, false))
             .ToList();
 
-        return new LibraryResponse(active, completed, mine, browse);
+        return new LibraryResponse(favorites, mine, completed, browse);
     }
 
     public async Task<WordSetResponse?> GetAsync(Guid id, Guid userId)
@@ -107,7 +127,7 @@ public class WordSetService(
         if (!set.IsPublic && set.CreatedByUserId != userId) return null;
         var count = await db.Words.CountAsync(w => w.WordSetId == set.Id);
         var prog = await progress.GetAsync(userId, set.Id);
-        return set.ToResponse(userId, count, prog?.Status ?? ProgressStatus.NotStarted);
+        return set.ToResponse(userId, count, prog?.Status ?? ProgressStatus.NotStarted, prog?.IsFavorite ?? false);
     }
 
     public async Task<(WordSetResponse? Response, string? Error)> CreateAsync(CreateWordSetRequest req, Guid userId)
@@ -116,7 +136,7 @@ public class WordSetService(
         if (user is null) return (null, "User not found");
         if (user.Role == UserRole.ViewOnly) return (null, "Read-only account");
 
-        var isOfficial = req.IsOfficial && user.Role == UserRole.Admin;
+        var isOfficial = req.IsOfficial && user.Role == UserRole.Admin && req.IsPublic;
         var weekId = (user.Role == UserRole.Admin) ? req.WeekId : null;
 
         var slug = await GenerateUniqueSlugAsync(req.Name);
@@ -159,19 +179,23 @@ public class WordSetService(
         if (req.Name is not null && req.Name.Trim().Length > 0) set.Name = req.Name.Trim();
         if (req.Description is not null) set.Description = req.Description;
         if (req.Level is not null) set.Level = req.Level;
-        if (req.IsPublic.HasValue) set.IsPublic = req.IsPublic.Value;
+        if (req.IsPublic.HasValue)
+        {
+            set.IsPublic = req.IsPublic.Value;
+            if (!set.IsPublic) set.IsOfficial = false; // private cannot be official
+        }
 
         if (user?.Role == UserRole.Admin)
         {
             if (req.ClearWeek) set.WeekId = null;
             else if (req.WeekId.HasValue) set.WeekId = req.WeekId.Value;
-            if (req.IsOfficial.HasValue) set.IsOfficial = req.IsOfficial.Value;
+            if (req.IsOfficial.HasValue) set.IsOfficial = req.IsOfficial.Value && set.IsPublic;
         }
 
         await sets.SaveAsync();
         var count = await db.Words.CountAsync(w => w.WordSetId == set.Id);
         var prog = await progress.GetAsync(userId, set.Id);
-        return set.ToResponse(userId, count, prog?.Status ?? ProgressStatus.NotStarted);
+        return set.ToResponse(userId, count, prog?.Status ?? ProgressStatus.NotStarted, prog?.IsFavorite ?? false);
     }
 
     public async Task<bool> DeleteAsync(Guid id, Guid userId)
@@ -201,11 +225,32 @@ public class WordSetService(
         };
         return await sets.AddAsync(vocab);
     }
+
+    // For admin "add existing set to week" search
+    public async Task<List<WordSetResponse>> SearchPublicAsync(string? q, Guid userId)
+    {
+        var user = await currentUser.GetAsync();
+        if (user?.Role != UserRole.Admin) return [];
+        var query = db.WordSets
+            .Include(s => s.Week)
+            .Where(s => s.IsPublic);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var lower = q.ToLower();
+            query = query.Where(s => s.Name.ToLower().Contains(lower));
+        }
+        var rows = await query
+            .OrderBy(s => s.Name)
+            .Take(50)
+            .Select(s => new { Set = s, WordCount = s.Words.Count })
+            .ToListAsync();
+        return rows.Select(r => r.Set.ToResponse(userId, r.WordCount)).ToList();
+    }
 }
 
 public record LibraryResponse(
-    List<WordSetResponse> Active,
-    List<WordSetResponse> Completed,
+    List<WordSetResponse> Favorites,
     List<WordSetResponse> Mine,
+    List<WordSetResponse> Completed,
     List<WordSetResponse> Browse
 );

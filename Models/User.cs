@@ -14,6 +14,9 @@ public class User
     public string? DisplayName { get; set; }
     public string? AnthropicApiKey { get; set; }
     public UserRole Role { get; set; } = UserRole.Default;
+    public int CurrentStreak { get; set; }
+    public int LongestStreak { get; set; }
+    public DateOnly? LastActivityDate { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime LastSeenAt { get; set; } = DateTime.UtcNow;
 }

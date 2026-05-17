@@ -34,4 +34,27 @@ public class WeeksController(WeekService service, IWeekRepository repo) : BaseCo
         var week = await service.GetAsync(weekId.Value, userId.Value);
         return week is null ? NotFound() : Ok(week);
     }
+
+    [HttpPost]
+    public async Task<ActionResult<object>> Create([FromBody] DTOs.Requests.CreateWeekRequest req)
+    {
+        var (week, error) = await service.CreateAsync(req);
+        if (week is null) return BadRequest(new { error });
+        return Ok(new { id = week.Id, number = week.Number, title = week.Title, description = week.Description });
+    }
+
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<object>> Update(Guid id, [FromBody] DTOs.Requests.UpdateWeekRequest req)
+    {
+        var (week, error) = await service.UpdateAsync(id, req);
+        if (week is null) return BadRequest(new { error });
+        return Ok(new { id = week.Id, number = week.Number, title = week.Title, description = week.Description });
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id)
+    {
+        var ok = await service.DeleteAsync(id);
+        return ok ? NoContent() : Forbid();
+    }
 }

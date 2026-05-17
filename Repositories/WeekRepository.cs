@@ -21,4 +21,12 @@ public class WeekRepository(AppDbContext db) : IWeekRepository
         await db.SaveChangesAsync();
         return week;
     }
+
+    public Task SaveAsync() => db.SaveChangesAsync();
+
+    public Task DeleteAsync(Week week)
+    {
+        db.Weeks.Remove(week);
+        return db.SaveChangesAsync();
+    }
 }

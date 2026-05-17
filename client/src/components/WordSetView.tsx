@@ -47,11 +47,6 @@ export default function WordSetView() {
     if (set.progressStatus === 'NotStarted') {
       await api.setProgress(setId, 'Active')
       setSet({ ...set, progressStatus: 'Active' })
-      showToast('Added to library', async () => {
-        if (!setId) return
-        await api.setProgress(setId, 'NotStarted')
-        setSet(s => s ? { ...s, progressStatus: 'NotStarted' } : s)
-      })
     }
   }
 
@@ -62,18 +57,13 @@ export default function WordSetView() {
 
   const toggleBookmark = async () => {
     if (!setId || !set) return
-    if (set.progressStatus === 'NotStarted') {
-      await api.setProgress(setId, 'Active')
-      setSet({ ...set, progressStatus: 'Active' })
-      showToast('Added to library')
-    } else {
-      await api.setProgress(setId, 'NotStarted')
-      setSet({ ...set, progressStatus: 'NotStarted' })
-      showToast('Removed from library')
-    }
+    const next = !set.isFavorite
+    await api.setFavorite(setId, next)
+    setSet({ ...set, isFavorite: next })
+    showToast(next ? 'Added to favorites' : 'Removed from favorites')
   }
 
-  const gradeCard = (knew: boolean) => {
+  const gradeCard = async (knew: boolean) => {
     const current = studyQueue[index]
     if (!current) return
     const learned = new Set(learnedIds)
@@ -82,8 +72,18 @@ export default function WordSetView() {
     else { missed.add(current.id); learned.delete(current.id) }
     setLearnedIds(learned)
     setMissedIds(missed)
-    if (index < studyQueue.length - 1) setIndex(index + 1)
-    else setIndex(studyQueue.length) // out-of-range = summary
+    const lastCard = index >= studyQueue.length - 1
+    if (!lastCard) {
+      setIndex(index + 1)
+      return
+    }
+    // Auto-complete if user studied full set + missed none
+    const studiedFullSet = studyQueue.length === words.length
+    if (studiedFullSet && missed.size === 0 && learned.size === words.length && setId && set) {
+      await api.setProgress(setId, 'Completed')
+      setSet({ ...set, progressStatus: 'Completed' })
+    }
+    setIndex(studyQueue.length) // summary
   }
 
   const reviewMissed = () => {
@@ -100,12 +100,6 @@ export default function WordSetView() {
     setIndex(0)
     setLearnedIds(new Set())
     setMissedIds(new Set())
-  }
-
-  const markComplete = async () => {
-    if (!setId || !set) return
-    await api.setProgress(setId, 'Completed')
-    setSet({ ...set, progressStatus: 'Completed' })
   }
 
   const markActive = async () => {
@@ -156,9 +150,6 @@ export default function WordSetView() {
                 <button onClick={reviewMissed} className="deck-btn primary">Practice {missedCount} missed</button>
               )}
               <button onClick={restartAll} className="deck-btn">Study all again</button>
-              {set.progressStatus !== 'Completed' && (
-                <button onClick={async () => { await markComplete(); setView('list') }} className="deck-btn">Mark set complete ✓</button>
-              )}
               <button onClick={() => setView('list')} className="deck-btn">Done</button>
             </div>
           </div>
@@ -219,10 +210,10 @@ export default function WordSetView() {
           <div className="set-header-actions">
             <button
               onClick={toggleBookmark}
-              className={`bookmark-btn ${set.progressStatus !== 'NotStarted' ? 'active' : ''}`}
-              aria-label={set.progressStatus !== 'NotStarted' ? 'Remove from library' : 'Add to library'}
+              className={`bookmark-btn ${set.isFavorite ? 'active' : ''}`}
+              aria-label={set.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
             >
-              <svg viewBox="0 0 24 24" width="22" height="22" fill={set.progressStatus !== 'NotStarted' ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill={set.isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
               </svg>
             </button>

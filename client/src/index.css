@@ -68,10 +68,32 @@ input, textarea, select {
   color: var(--text-h);
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px 12px;
+  border-radius: 8px;
+  padding: 10px 12px;
   outline: none;
   transition: border-color 0.15s;
+}
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 36px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 16px;
+}
+
+select:hover {
+  border-color: var(--accent);
+}
+
+select option {
+  background: var(--bg-elev);
+  color: var(--text-h);
+  padding: 8px;
 }
 
 input:focus, textarea:focus, select:focus {

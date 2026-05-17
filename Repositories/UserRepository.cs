@@ -20,4 +20,10 @@ public class UserRepository(AppDbContext db) : IUserRepository
 
     public Task<List<User>> GetAllAsync() =>
         db.Users.OrderBy(u => u.Email).ToListAsync();
+
+    public Task DeleteAsync(User user)
+    {
+        db.Users.Remove(user);
+        return db.SaveChangesAsync();
+    }
 }

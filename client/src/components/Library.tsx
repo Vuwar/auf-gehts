@@ -15,6 +15,9 @@ export default function Library() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<unknown>(null)
   const [creating, setCreating] = useState(false)
+  const [completedOpen, setCompletedOpen] = useState(false)
+  const [browseOpen, setBrowseOpen] = useState(false)
+
   const [newName, setNewName] = useState('')
   const [newDesc, setNewDesc] = useState('')
   const [newLevel, setNewLevel] = useState('A1')
@@ -90,7 +93,7 @@ export default function Library() {
             <>
               <span className="card-label">Admin: assign to week</span>
               <select value={newWeekId} onChange={e => setNewWeekId(e.target.value)}>
-                <option value="">— no week —</option>
+                <option value="">Choose a week</option>
                 {weeks.map(w => <option key={w.id} value={w.id}>Woche {w.number}: {w.title}</option>)}
               </select>
               <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -104,10 +107,11 @@ export default function Library() {
         </form>
       )}
 
-      <Section title="Active" sets={data.active} emptyMsg="No sets in progress. Start studying from Abenteuer." onClick={(s) => nav(`/sets/${s.slug}`)} />
-      <Section title="Completed" sets={data.completed} emptyMsg="No completed sets yet." onClick={(s) => nav(`/sets/${s.slug}`)} />
-      <Section title="My sets" sets={data.mine.filter(s => !(s.name === 'My Vocabulary' && s.wordCount === 0))} emptyMsg="You haven't created any sets yet." onClick={(s) => nav(`/sets/${s.slug}`)} />
-      <Section title="Browse sets" sets={data.browse} emptyMsg="No other public sets right now." onClick={(s) => nav(`/sets/${s.slug}`)} />
+      <Section title="Favorites" sets={data.favorites} emptyMsg="No favorites yet. Tap the heart on any set." onClick={s => nav(`/sets/${s.slug}`)} />
+      <Section title="My sets" sets={data.mine} emptyMsg="You haven't created any sets yet." onClick={s => nav(`/sets/${s.slug}`)} />
+
+      <CollapsibleSection title="Completed" sets={data.completed} emptyMsg="No completed sets yet." onClick={s => nav(`/sets/${s.slug}`)} open={completedOpen} onToggle={() => setCompletedOpen(!completedOpen)} />
+      <CollapsibleSection title="Browse sets" sets={data.browse} emptyMsg="No other public sets right now." onClick={s => nav(`/sets/${s.slug}`)} open={browseOpen} onToggle={() => setBrowseOpen(!browseOpen)} />
     </div>
   )
 }
@@ -120,21 +124,53 @@ function Section({ title, sets, emptyMsg, onClick }: { title: string; sets: Word
         <p className="hint">{emptyMsg}</p>
       ) : (
         <ul className="deck-list">
-          {sets.map(s => (
-            <li key={s.id} className="deck-item">
-              <button onClick={() => onClick(s)} className="deck-item-main">
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <span>{s.name}</span>
-                  {s.weekNumber && <span className="starter-level">W{s.weekNumber}</span>}
-                  {s.level && <span className="starter-level">{s.level}</span>}
-                  {!s.isPublic && <span className="starter-level">private</span>}
-                  <span className="deck-item-count">· {s.wordCount} words</span>
-                </div>
-              </button>
-            </li>
-          ))}
+          {sets.map(s => <SetRow key={s.id} set={s} onClick={onClick} />)}
         </ul>
       )}
     </>
+  )
+}
+
+function CollapsibleSection(props: { title: string; sets: WordSet[]; emptyMsg: string; onClick: (s: WordSet) => void; open: boolean; onToggle: () => void }) {
+  return (
+    <>
+      <button onClick={props.onToggle} className="collapse-toggle">
+        <span>{props.title} <span className="hint">({props.sets.length})</span></span>
+        <span style={{ transform: props.open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', display: 'inline-flex' }}>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </span>
+      </button>
+      {props.open && (
+        <div className="collapse-content">
+          {props.sets.length === 0 ? (
+            <p className="hint" style={{ padding: '8px 4px' }}>{props.emptyMsg}</p>
+          ) : (
+            <ul className="deck-list">
+              {props.sets.map(s => <SetRow key={s.id} set={s} onClick={props.onClick} />)}
+            </ul>
+          )}
+        </div>
+      )}
+    </>
+  )
+}
+
+function SetRow({ set, onClick }: { set: WordSet; onClick: (s: WordSet) => void }) {
+  return (
+    <li className="deck-item">
+      <button onClick={() => onClick(set)} className="deck-item-main">
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <span>{set.name}</span>
+          {set.isFavorite && <span className="starter-level" title="Favorited">♥</span>}
+          {set.isOwner && <span className="starter-level" title="Your set">Mine</span>}
+          {set.weekNumber && <span className="starter-level">W{set.weekNumber}</span>}
+          {set.level && <span className="starter-level">{set.level}</span>}
+          {!set.isPublic && <span className="starter-level">private</span>}
+          <span className="deck-item-count">· {set.wordCount} words</span>
+        </div>
+      </button>
+    </li>
   )
 }

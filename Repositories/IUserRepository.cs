@@ -8,4 +8,5 @@ public interface IUserRepository
     Task<User> AddAsync(User user);
     Task SaveAsync();
     Task<List<User>> GetAllAsync();
+    Task DeleteAsync(User user);
 }

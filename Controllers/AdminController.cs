@@ -32,4 +32,16 @@ public class AdminController(IUserRepository userRepo, CurrentUserAccessor curre
         await userRepo.SaveAsync();
         return Ok(target.ToResponse());
     }
+
+    [HttpDelete("users/{id:guid}")]
+    public async Task<IActionResult> DeleteUser(Guid id)
+    {
+        var current = await currentUser.GetAsync();
+        if (current?.Role != UserRole.Admin) return Forbid();
+        if (current.Id == id) return BadRequest(new { error = "Cannot delete your own account" });
+        var target = await userRepo.GetByIdAsync(id);
+        if (target is null) return NotFound();
+        await userRepo.DeleteAsync(target);
+        return NoContent();
+    }
 }

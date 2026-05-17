@@ -30,6 +30,7 @@ export interface WordSet {
   isPublic: boolean
   isOfficial: boolean
   isOwner: boolean
+  isFavorite: boolean
   wordCount: number
   progressStatus: 'NotStarted' | 'Active' | 'Completed'
   createdAt: string
@@ -46,9 +47,9 @@ export interface Word {
 }
 
 export interface Library {
-  active: WordSet[]
-  completed: WordSet[]
+  favorites: WordSet[]
   mine: WordSet[]
+  completed: WordSet[]
   browse: WordSet[]
 }
 
@@ -86,9 +87,30 @@ export interface UserProfile {
   email: string
   displayName: string | null
   role: UserRole
+  currentStreak: number
+  longestStreak: number
+  lastActivityDate: string | null
   hasAnthropicKey: boolean
   createdAt: string
   lastSeenAt: string
+}
+
+export interface FriendProgress {
+  userId: string
+  displayName: string
+  currentStreak: number
+  currentWeekNumber: number | null
+  currentWeekTitle: string | null
+  currentWeekCompleted: number
+  currentWeekTotal: number
+}
+
+export interface Dashboard {
+  stats: Stats
+  weeks: Week[]
+  currentStreak: number
+  longestStreak: number
+  friends: FriendProgress[]
 }
 
 export class ApiError extends Error {
@@ -136,10 +158,21 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 
 export const api = {
   getStats: () => request<Stats>(`${API_BASE}/stats`),
-  getDashboard: () => request<{ stats: Stats; weeks: Week[] }>(`${API_BASE}/dashboard`),
+  getDashboard: () => request<Dashboard>(`${API_BASE}/dashboard`),
 
   listWeeks: () => request<Week[]>(`${API_BASE}/weeks`),
   getWeek: (idOrNumber: string | number) => request<WeekDetail>(`${API_BASE}/weeks/${idOrNumber}`),
+  createWeek: (number: number, title: string, description?: string) =>
+    request<{ id: string; number: number; title: string; description: string | null }>(`${API_BASE}/weeks`, {
+      method: 'POST',
+      body: JSON.stringify({ number, title, description: description ?? null }),
+    }),
+  updateWeek: (id: string, data: { number?: number; title?: string; description?: string }) =>
+    request<{ id: string; number: number; title: string; description: string | null }>(`${API_BASE}/weeks/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ number: data.number ?? null, title: data.title ?? null, description: data.description ?? null }),
+    }),
+  deleteWeek: (id: string) => request<void>(`${API_BASE}/weeks/${id}`, { method: 'DELETE' }),
 
   getLibrary: () => request<Library>(`${API_BASE}/sets/library`),
   getSet: (idOrSlug: string) => request<WordSet>(`${API_BASE}/sets/${idOrSlug}`),
@@ -175,6 +208,13 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ status }),
     }),
+  setFavorite: (idOrSlug: string, isFavorite: boolean) =>
+    request<void>(`${API_BASE}/sets/${idOrSlug}/favorite`, {
+      method: 'PUT',
+      body: JSON.stringify({ isFavorite }),
+    }),
+  searchSets: (q?: string) =>
+    request<WordSet[]>(`${API_BASE}/sets/search${q ? `?q=${encodeURIComponent(q)}` : ''}`),
 
   listWords: (idOrSlug: string) => request<Word[]>(`${API_BASE}/sets/${idOrSlug}/words`),
   addWord: (idOrSlug: string, front: string, back: string, context?: string) =>
@@ -224,6 +264,8 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ role }),
     }),
+  adminDeleteUser: (id: string) =>
+    request<void>(`${API_BASE}/admin/users/${id}`, { method: 'DELETE' }),
 }
 
 export function parseBulkText(text: string): { front: string; back: string }[] {

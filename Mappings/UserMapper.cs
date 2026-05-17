@@ -6,5 +6,11 @@ namespace Api.Mappings;
 public static class UserMapper
 {
     public static UserResponse ToResponse(this User u) =>
-        new(u.Id, u.Email, u.DisplayName, u.Role.ToString(), !string.IsNullOrEmpty(u.AnthropicApiKey), u.CreatedAt, u.LastSeenAt);
+        new(
+            u.Id, u.Email, u.DisplayName, u.Role.ToString(),
+            u.CurrentStreak, u.LongestStreak,
+            u.LastActivityDate?.ToString("yyyy-MM-dd"),
+            !string.IsNullOrEmpty(u.AnthropicApiKey),
+            u.CreatedAt, u.LastSeenAt
+        );
 }

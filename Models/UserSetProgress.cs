@@ -13,6 +13,7 @@ public class UserSetProgress
     public Guid UserId { get; set; }
     public Guid WordSetId { get; set; }
     public ProgressStatus Status { get; set; } = ProgressStatus.NotStarted;
+    public bool IsFavorite { get; set; }
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public DateTime LastReviewedAt { get; set; } = DateTime.UtcNow;

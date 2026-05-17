@@ -1,12 +1,22 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api, type Week, type WeekDetail, type WordSet } from '../api'
+import { useAuth } from '../auth'
+import EditWeekSheet from './EditWeekSheet'
+import CreateSetForWeekSheet from './CreateSetForWeekSheet'
+import AssignExistingSetSheet from './AssignExistingSetSheet'
 
 export default function Abenteuer() {
   const { weekSlug } = useParams<{ weekSlug?: string }>()
+  const { profile } = useAuth()
+  const isAdmin = profile?.role === 'Admin'
   const [weeks, setWeeks] = useState<Week[]>([])
   const [detail, setDetail] = useState<WeekDetail | null>(null)
   const [loading, setLoading] = useState(true)
+  const [editingWeek, setEditingWeek] = useState(false)
+  const [creatingSet, setCreatingSet] = useState(false)
+  const [assigningExisting, setAssigningExisting] = useState(false)
+  const [confirmDeleteSet, setConfirmDeleteSet] = useState<string | null>(null)
   const nav = useNavigate()
 
   useEffect(() => {
@@ -20,6 +30,20 @@ export default function Abenteuer() {
     }
   }, [weekSlug])
 
+  const reload = () => {
+    if (weekSlug) {
+      const match = weekSlug.match(/^woche-(\d+)$/)
+      const param = match ? match[1] : weekSlug
+      api.getWeek(param).then(setDetail)
+    }
+  }
+
+  const deleteSet = async (id: string) => {
+    await api.deleteSet(id)
+    setConfirmDeleteSet(null)
+    reload()
+  }
+
   if (loading) return <div className="deck"><p className="empty-state">Loading...</p></div>
 
   if (weekSlug && detail) {
@@ -30,10 +54,14 @@ export default function Abenteuer() {
         </div>
         <div className="deck-header">
           <h1>Woche {detail.number}: {detail.title}</h1>
+          {isAdmin && (
+            <button onClick={() => setEditingWeek(true)} className="deck-btn">Edit week</button>
+          )}
         </div>
         {detail.description && <p className="hint">{detail.description}</p>}
 
         <h2 className="section-title">Word sets</h2>
+        {detail.sets.length === 0 && <p className="empty-state">No sets yet.</p>}
         <ul className="deck-list">
           {detail.sets.map(s => (
             <li key={s.id} className="deck-item">
@@ -46,9 +74,49 @@ export default function Abenteuer() {
                 </div>
                 {s.description && <div className="hint" style={{ marginTop: '4px' }}>{s.description}</div>}
               </button>
+              {isAdmin && (
+                confirmDeleteSet === s.id ? (
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button onClick={() => setConfirmDeleteSet(null)} className="deck-btn cancel-btn">Cancel</button>
+                    <button onClick={() => deleteSet(s.id)} className="deck-btn danger-solid">Delete</button>
+                  </div>
+                ) : (
+                  <button onClick={() => setConfirmDeleteSet(s.id)} className="deck-btn danger" aria-label="Delete set">×</button>
+                )
+              )}
             </li>
           ))}
         </ul>
+
+        {isAdmin && (
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+            <button onClick={() => setCreatingSet(true)} className="deck-btn primary">+ New set</button>
+            <button onClick={() => setAssigningExisting(true)} className="deck-btn">Assign existing</button>
+          </div>
+        )}
+
+        {editingWeek && (
+          <EditWeekSheet
+            week={detail}
+            onClose={() => setEditingWeek(false)}
+            onUpdated={reload}
+            onDeleted={() => nav('/abenteuer')}
+          />
+        )}
+        {creatingSet && (
+          <CreateSetForWeekSheet
+            weekId={detail.id}
+            onClose={() => setCreatingSet(false)}
+            onCreated={reload}
+          />
+        )}
+        {assigningExisting && (
+          <AssignExistingSetSheet
+            weekId={detail.id}
+            onClose={() => setAssigningExisting(false)}
+            onAssigned={reload}
+          />
+        )}
       </div>
     )
   }
@@ -59,7 +127,7 @@ export default function Abenteuer() {
         <h1>Abenteuer</h1>
         <span className="deck-progress">Your German journey</span>
       </div>
-      <p className="hint">Work through each week in order, or jump around. Each week has word sets and (soon) other activities.</p>
+      <p className="hint">Work through each week in order, or jump around.</p>
 
       <div className="weeks-grid">
         {weeks.map(w => {

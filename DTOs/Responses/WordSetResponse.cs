@@ -11,6 +11,7 @@ public record WordSetResponse(
     bool IsPublic,
     bool IsOfficial,
     bool IsOwner,
+    bool IsFavorite,
     int WordCount,
     string ProgressStatus,
     DateTime CreatedAt

@@ -16,6 +16,14 @@ public class WordSetsController(WordSetService service) : BaseController
         return Ok(await service.ListForLibraryAsync(userId.Value));
     }
 
+    [HttpGet("search")]
+    public async Task<ActionResult<List<WordSetResponse>>> Search([FromQuery] string? q)
+    {
+        var userId = GetUserId();
+        if (userId is null) return Unauthorized();
+        return Ok(await service.SearchPublicAsync(q, userId.Value));
+    }
+
     [HttpGet("{idOrSlug}")]
     public async Task<ActionResult<WordSetResponse>> Get(string idOrSlug)
     {

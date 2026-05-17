@@ -5,7 +5,7 @@ namespace Api.Mappings;
 
 public static class WordSetMapper
 {
-    public static WordSetResponse ToResponse(this WordSet s, Guid currentUserId, int wordCount, ProgressStatus status = ProgressStatus.NotStarted) =>
+    public static WordSetResponse ToResponse(this WordSet s, Guid currentUserId, int wordCount, ProgressStatus status = ProgressStatus.NotStarted, bool isFavorite = false) =>
         new(
             s.Id,
             s.Slug,
@@ -17,6 +17,7 @@ public static class WordSetMapper
             s.IsPublic,
             s.IsOfficial,
             s.CreatedByUserId == currentUserId,
+            isFavorite,
             wordCount,
             status.ToString(),
             s.CreatedAt

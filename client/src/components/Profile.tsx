@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react'
-import { api, type UserProfile, type UserRole } from '../api'
+import { api, type UserProfile } from '../api'
+import EditUserSheet from './EditUserSheet'
+
+const ROLE_BADGE: Record<string, { icon: string; color: string }> = {
+  Admin: { icon: '👑', color: 'var(--accent)' },
+  Default: { icon: '👤', color: 'var(--text)' },
+  ViewOnly: { icon: '👁️', color: 'var(--text)' },
+}
 
 export default function Profile() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -10,6 +17,7 @@ export default function Profile() {
 
   const [users, setUsers] = useState<UserProfile[]>([])
   const [usersLoading, setUsersLoading] = useState(false)
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null)
 
   useEffect(() => {
     api.getMe().then(p => {
@@ -47,10 +55,6 @@ export default function Profile() {
     setProfile(updated)
   }
 
-  const changeRole = async (id: string, role: UserRole) => {
-    const updated = await api.adminSetUserRole(id, role)
-    setUsers(users.map(u => u.id === id ? updated : u))
-  }
 
   if (!profile) return <p className="empty-state">Loading...</p>
 
@@ -102,27 +106,35 @@ export default function Profile() {
           {usersLoading ? (
             <p className="hint">Loading users...</p>
           ) : (
-            <ul className="deck-list">
-              {users.map(u => (
-                <li key={u.id} className="deck-item">
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-                    <strong style={{ fontSize: '14px' }}>{u.displayName || '—'}</strong>
-                    <span className="hint" style={{ fontSize: '12px' }}>{u.email}</span>
-                  </div>
-                  <select
-                    value={u.role}
-                    onChange={e => changeRole(u.id, e.target.value as UserRole)}
-                    disabled={u.id === profile.id}
-                  >
-                    <option value="Admin">Admin</option>
-                    <option value="Default">Default</option>
-                    <option value="ViewOnly">ViewOnly</option>
-                  </select>
-                </li>
-              ))}
+            <ul className="user-list">
+              {users.map(u => {
+                const badge = ROLE_BADGE[u.role] ?? ROLE_BADGE.Default
+                return (
+                  <li key={u.id} className="user-row" onClick={() => setEditingUser(u)}>
+                    <span className="user-avatar">{(u.displayName ?? u.email)[0]?.toUpperCase()}</span>
+                    <div className="user-row-text">
+                      <strong>{u.displayName || '—'}</strong>
+                      <span>{u.email}</span>
+                    </div>
+                    <span className="role-badge" style={{ color: badge.color, borderColor: badge.color }}>
+                      <span>{badge.icon}</span> {u.role}
+                    </span>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </>
+      )}
+
+      {editingUser && (
+        <EditUserSheet
+          user={editingUser}
+          currentUserId={profile.id}
+          onClose={() => setEditingUser(null)}
+          onUpdated={(u) => setUsers(users.map(x => x.id === u.id ? u : x))}
+          onDeleted={(id) => { setUsers(users.filter(x => x.id !== id)); setEditingUser(null) }}
+        />
       )}
     </div>
   )

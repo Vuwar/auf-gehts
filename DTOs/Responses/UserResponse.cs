@@ -5,6 +5,9 @@ public record UserResponse(
     string Email,
     string? DisplayName,
     string Role,
+    int CurrentStreak,
+    int LongestStreak,
+    string? LastActivityDate,
     bool HasAnthropicKey,
     DateTime CreatedAt,
     DateTime LastSeenAt

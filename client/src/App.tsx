@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, NavLink, Outlet, useLocation, Link } from 'react-router-dom'
 import Library from './components/Library'
 import WordSetView from './components/WordSetView'
 import Dashboard from './components/Dashboard'
@@ -6,26 +6,32 @@ import Reader from './components/Reader'
 import Profile from './components/Profile'
 import Login from './components/Login'
 import Abenteuer from './components/Abenteuer'
+import UserMenu from './components/UserMenu'
 import { AuthProvider, useAuth } from './auth'
 import './App.css'
 
 function TopBar() {
-  const { user, profile, signOut } = useAuth()
-  const displayLabel = profile?.displayName || user?.email
-
   return (
     <header className="top-bar">
-      <NavLink to="/profile" className="top-bar-profile">
-        <span className="top-bar-avatar">{(displayLabel ?? '?')[0]?.toUpperCase()}</span>
-        <span className="top-bar-name">{displayLabel}</span>
-      </NavLink>
+      <Link to="/dashboard" className="brand" aria-label="Home">
+        <span className="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="13 17 18 12 13 7" />
+            <polyline points="6 17 11 12 6 7" />
+          </svg>
+        </span>
+        <span className="brand-text">
+          <span>auf</span>
+          <span className="brand-text-accent">gehts</span>
+        </span>
+      </Link>
       <nav className="top-bar-nav">
         <NavLink to="/dashboard" className={({ isActive }) => `top-bar-link ${isActive ? 'active' : ''}`}>Dashboard</NavLink>
         <NavLink to="/abenteuer" className={({ isActive }) => `top-bar-link ${isActive ? 'active' : ''}`}>Abenteuer</NavLink>
         <NavLink to="/library" className={({ isActive }) => `top-bar-link ${isActive ? 'active' : ''}`}>Library</NavLink>
         <NavLink to="/reader" className={({ isActive }) => `top-bar-link ${isActive ? 'active' : ''}`}>Reader</NavLink>
       </nav>
-      <button onClick={() => signOut()} className="top-bar-signout">Sign out</button>
+      <UserMenu />
     </header>
   )
 }

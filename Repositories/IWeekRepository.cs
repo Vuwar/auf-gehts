@@ -8,4 +8,6 @@ public interface IWeekRepository
     Task<Week?> GetByIdAsync(Guid id);
     Task<Week?> GetByNumberAsync(int number);
     Task<Week> AddAsync(Week week);
+    Task SaveAsync();
+    Task DeleteAsync(Week week);
 }

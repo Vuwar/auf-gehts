@@ -52,4 +52,34 @@ public class ProgressRepository(AppDbContext db) : IProgressRepository
         await db.SaveChangesAsync();
         return existing;
     }
+
+    public async Task<UserSetProgress> SetFavoriteAsync(Guid userId, Guid setId, bool isFavorite)
+    {
+        var existing = await db.UserSetProgress.FirstOrDefaultAsync(p => p.UserId == userId && p.WordSetId == setId);
+        if (existing is null)
+        {
+            existing = new UserSetProgress
+            {
+                UserId = userId,
+                WordSetId = setId,
+                Status = ProgressStatus.NotStarted,
+                IsFavorite = isFavorite,
+                LastReviewedAt = DateTime.UtcNow,
+            };
+            db.UserSetProgress.Add(existing);
+        }
+        else
+        {
+            existing.IsFavorite = isFavorite;
+        }
+        await db.SaveChangesAsync();
+        return existing;
+    }
+
+    public Task<List<UserSetProgress>> GetFavoritesAsync(Guid userId) =>
+        db.UserSetProgress
+          .Include(p => p.WordSet).ThenInclude(s => s.Week)
+          .Where(p => p.UserId == userId && p.IsFavorite)
+          .OrderByDescending(p => p.LastReviewedAt)
+          .ToListAsync();
 }

@@ -10,14 +10,15 @@ public class DashboardService(
     AppDbContext db,
     WordSetService setService,
     IWeekRepository weekRepo,
-    IProgressRepository progressRepo)
+    IProgressRepository progressRepo,
+    IUserRepository userRepo)
 {
     public async Task<DashboardResponse> GetAsync(Guid userId)
     {
+        var me = await userRepo.GetByIdAsync(userId);
         var vocab = await setService.EnsureVocabSetAsync(userId);
         var weekAgo = DateTime.UtcNow.AddDays(-7);
 
-        // 1 query: combined vocab counts via FILTER
         var vocabCounts = await db.Words
             .Where(w => w.WordSetId == vocab.Id)
             .GroupBy(_ => 1)
@@ -28,7 +29,6 @@ public class DashboardService(
             })
             .FirstOrDefaultAsync() ?? new { Total = 0, ThisWeek = 0 };
 
-        // 1 query: progress counts via FILTER
         var progressCounts = await db.UserSetProgress
             .Where(p => p.UserId == userId)
             .GroupBy(_ => 1)
@@ -46,10 +46,9 @@ public class DashboardService(
             vocabCounts.ThisWeek
         );
 
-        // Weeks with set counts and per-user completed counts (1 query for weeks, 1 for setsByWeek, 1 for statuses)
         var weeks = await weekRepo.GetAllAsync();
         var setsByWeek = await db.WordSets
-            .Where(s => s.WeekId != null && s.IsOfficial)
+            .Where(s => s.WeekId != null && s.IsOfficial && s.IsPublic)
             .Select(s => new { s.Id, WeekId = s.WeekId!.Value })
             .ToListAsync();
         var statuses = await progressRepo.GetStatusesForUserAsync(userId);
@@ -62,6 +61,42 @@ public class DashboardService(
             return new WeekResponse(w.Id, w.Number, w.Title, w.Description, setIds.Count, completed);
         }).ToList();
 
-        return new DashboardResponse(stats, weekResponses);
+        // Friends: all other users + current week progress
+        var currentWeek = weekResponses.FirstOrDefault(w => w.CompletedCount < w.SetCount) ?? weekResponses.LastOrDefault();
+        var currentWeekSetIds = currentWeek is null ? new List<Guid>() : weekSetMap.GetValueOrDefault(currentWeek.Id, []);
+
+        var others = await db.Users
+            .Where(u => u.Id != userId)
+            .Select(u => new { u.Id, u.DisplayName, u.Email, u.CurrentStreak })
+            .ToListAsync();
+
+        var friendIds = others.Select(o => o.Id).ToList();
+        var friendCompletions = currentWeekSetIds.Count == 0 || friendIds.Count == 0
+            ? new Dictionary<Guid, int>()
+            : await db.UserSetProgress
+                .Where(p => friendIds.Contains(p.UserId)
+                         && currentWeekSetIds.Contains(p.WordSetId)
+                         && p.Status == ProgressStatus.Completed)
+                .GroupBy(p => p.UserId)
+                .Select(g => new { UserId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.UserId, x => x.Count);
+
+        var friends = others.Select(o => new FriendProgressResponse(
+            o.Id,
+            o.DisplayName ?? o.Email,
+            o.CurrentStreak,
+            currentWeek?.Number,
+            currentWeek?.Title,
+            friendCompletions.GetValueOrDefault(o.Id, 0),
+            currentWeek?.SetCount ?? 0
+        )).ToList();
+
+        return new DashboardResponse(
+            stats,
+            weekResponses,
+            me?.CurrentStreak ?? 0,
+            me?.LongestStreak ?? 0,
+            friends
+        );
     }
 }
