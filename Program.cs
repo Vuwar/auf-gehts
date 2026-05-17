@@ -59,13 +59,16 @@ builder.Services.AddScoped<CurrentUserAccessor>();
 builder.Services.AddSingleton(_ => Channel.CreateBounded<EventLog>(new BoundedChannelOptions(10_000)
 {
     FullMode = BoundedChannelFullMode.DropOldest,
-    SingleReader = true,
+    SingleReader = false,
     SingleWriter = false,
 }));
 builder.Services.AddSingleton<IEventLog, EventLogService>();
 builder.Services.AddSingleton<ConcurrencyTracker>();
 builder.Services.AddSingleton<SlowQueryInterceptor>();
 builder.Services.AddScoped<DiagnosticAnalyzer>();
+
+builder.Services.AddHostedService<EventLogWorker>();
+builder.Services.AddHostedService<EventLogWorker>();
 builder.Services.AddHostedService<EventLogWorker>();
 
 builder.Services.AddDbContext<AppDbContext>((sp, options) =>
