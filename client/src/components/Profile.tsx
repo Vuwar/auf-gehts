@@ -14,6 +14,8 @@ export default function Profile() {
   const [apiKey, setApiKey] = useState('')
   const [saving, setSaving] = useState(false)
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
+  const [showKeySheet, setShowKeySheet] = useState(false)
+  const [keySaving, setKeySaving] = useState(false)
 
   const [users, setUsers] = useState<UserProfile[]>([])
   const [usersLoading, setUsersLoading] = useState(false)
@@ -37,9 +39,8 @@ export default function Profile() {
     e.preventDefault()
     setSaving(true)
     try {
-      const updated = await api.updateMe(displayName, apiKey || undefined)
+      const updated = await api.updateMe(displayName)
       setProfile(updated)
-      setApiKey('')
       setSavedMsg('Saved')
       setTimeout(() => setSavedMsg(null), 2000)
     } catch (e: any) {
@@ -53,6 +54,21 @@ export default function Profile() {
     if (!confirm('Remove your Anthropic API key?')) return
     const updated = await api.updateMe(undefined, '')
     setProfile(updated)
+  }
+
+  const saveKey = async () => {
+    if (!apiKey.trim()) return
+    setKeySaving(true)
+    try {
+      const updated = await api.updateMe(undefined, apiKey)
+      setProfile(updated)
+      setApiKey('')
+      setShowKeySheet(false)
+    } catch (e: any) {
+      alert(e.message)
+    } finally {
+      setKeySaving(false)
+    }
   }
 
 
@@ -74,24 +90,16 @@ export default function Profile() {
         <span className="card-label">Username</span>
         <input type="text" value={displayName} onChange={e => setDisplayName(e.target.value)} />
 
-        <span className="card-label">Anthropic API key (optional)</span>
-        <p className="hint">
-          Provide your own key for unlimited AI text generation. Without it, you get 10 free generations per day.
-          Get a key at <code>console.anthropic.com</code>.
-        </p>
+        <span className="card-label">Anthropic API key</span>
         {profile.hasAnthropicKey ? (
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <span style={{ color: 'var(--accent)' }}>✓ Key set</span>
+            <span style={{ color: 'var(--accent)' }}>✓ Key linked</span>
             <button type="button" onClick={clearKey} className="deck-btn danger">Remove</button>
           </div>
         ) : (
-          <input
-            type="password"
-            placeholder="sk-ant-..."
-            value={apiKey}
-            onChange={e => setApiKey(e.target.value)}
-            autoComplete="off"
-          />
+          <button type="button" onClick={() => setShowKeySheet(true)} className="deck-btn" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '18px' }}>🔑</span> Link API Key
+          </button>
         )}
 
         <button type="submit" disabled={saving} className="deck-btn primary">
@@ -135,6 +143,36 @@ export default function Profile() {
           onUpdated={(u) => setUsers(users.map(x => x.id === u.id ? u : x))}
           onDeleted={(id) => { setUsers(users.filter(x => x.id !== id)); setEditingUser(null) }}
         />
+      )}
+
+      {showKeySheet && (
+        <div className="sheet-overlay" onClick={() => { setShowKeySheet(false); setApiKey('') }}>
+          <div className="sheet" onClick={e => e.stopPropagation()}>
+            <div className="sheet-header">
+              <h2>Link Anthropic API Key</h2>
+              <button className="sheet-close" onClick={() => { setShowKeySheet(false); setApiKey('') }}>×</button>
+            </div>
+            <div className="sheet-body">
+              <p className="hint" style={{ margin: 0 }}>
+                Paste your key for unlimited AI text generation. Without it, you get 10 free generations per day.
+              </p>
+              <input
+                type="password"
+                placeholder="sk-ant-..."
+                value={apiKey}
+                onChange={e => setApiKey(e.target.value)}
+                autoComplete="off"
+                autoFocus
+              />
+              <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" className="hint" style={{ margin: 0 }}>
+                Get a key at console.anthropic.com →
+              </a>
+              <button className="deck-btn primary" disabled={!apiKey.trim() || keySaving} onClick={saveKey}>
+                {keySaving ? 'Saving...' : 'Link Key'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
