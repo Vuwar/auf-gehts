@@ -29,8 +29,8 @@ public class AiController(AiService service) : BaseController
     {
         var userId = GetUserId();
         if (userId is null) return Unauthorized();
-        var remaining = await service.GetRemainingTodayAsync(userId.Value);
-        return Ok(new { remaining });
+        var (generate, translate) = await service.GetRemainingTodayAsync(userId.Value);
+        return Ok(new { generateRemaining = generate, translateRemaining = translate, remaining = generate });
     }
 
     [HttpPost("translate")]

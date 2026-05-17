@@ -51,7 +51,7 @@ export default function Profile() {
   }
 
   const clearKey = async () => {
-    if (!confirm('Remove your Anthropic API key?')) return
+    if (!confirm('Remove your Groq API key?')) return
     const updated = await api.updateMe(undefined, '')
     setProfile(updated)
   }
@@ -90,7 +90,7 @@ export default function Profile() {
         <span className="card-label">Username</span>
         <input type="text" value={displayName} onChange={e => setDisplayName(e.target.value)} />
 
-        <span className="card-label">Anthropic API key</span>
+        <span className="card-label">Groq API key</span>
         {profile.hasAnthropicKey ? (
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <span style={{ color: 'var(--accent)' }}>✓ Key linked</span>
@@ -149,7 +149,7 @@ export default function Profile() {
         <div className="sheet-overlay" onClick={() => { setShowKeySheet(false); setApiKey('') }}>
           <div className="sheet" onClick={e => e.stopPropagation()}>
             <div className="sheet-header">
-              <h2>Link Anthropic API Key</h2>
+              <h2>Link Groq API Key</h2>
               <button className="sheet-close" onClick={() => { setShowKeySheet(false); setApiKey('') }}>×</button>
             </div>
             <div className="sheet-body">
@@ -158,14 +158,14 @@ export default function Profile() {
               </p>
               <input
                 type="password"
-                placeholder="sk-ant-..."
+                placeholder="gsk_..."
                 value={apiKey}
                 onChange={e => setApiKey(e.target.value)}
                 autoComplete="off"
                 autoFocus
               />
-              <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" className="hint" style={{ margin: 0 }}>
-                Get a key at console.anthropic.com →
+              <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" className="hint" style={{ margin: 0 }}>
+                Get a free key at console.groq.com →
               </a>
               <button className="deck-btn primary" disabled={!apiKey.trim() || keySaving} onClick={saveKey}>
                 {keySaving ? 'Saving...' : 'Link Key'}

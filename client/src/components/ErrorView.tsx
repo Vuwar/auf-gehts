@@ -111,11 +111,11 @@ function describe(error: unknown, context: Props['context']) {
     }
   }
 
-  if (context === 'ai' && (status === 400 || /api key|anthropic/i.test(message))) {
+  if (context === 'ai' && (status === 400 || /api key|anthropic|gemini|groq/i.test(message))) {
     return {
       icon: '🔑',
       title: 'AI key needed',
-      body: 'Add your Anthropic API key in Profile to generate texts, or use the free daily quota.',
+      body: 'Add your Groq API key in Profile to generate texts, or use the free daily quota.',
       actionLabel: 'Open Profile',
       actionHref: '/profile',
     }

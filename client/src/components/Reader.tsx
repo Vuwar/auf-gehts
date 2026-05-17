@@ -185,7 +185,7 @@ export default function Reader() {
         {mode === 'generate' && (
           <div className="form-row">
             <p className="hint">
-              AI generates text using Claude Haiku.
+              AI generates text using Llama 3.3 via Groq.
               {remaining !== null && remaining >= 0 && ` ${remaining} generations remaining today.`}
               {remaining === -1 && ' Using your own API key (unlimited).'}
             </p>

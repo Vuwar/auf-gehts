@@ -1,6 +1,7 @@
 using Api.DTOs.Responses;
 using Api.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.OutputCaching;
 
 namespace Api.Controllers;
 
@@ -8,6 +9,7 @@ namespace Api.Controllers;
 public class DashboardController(DashboardService service) : BaseController
 {
     [HttpGet]
+    [OutputCache(PolicyName = "PerUser")]
     public async Task<ActionResult<DashboardResponse>> Get()
     {
         var userId = GetUserId();

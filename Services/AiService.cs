@@ -15,39 +15,30 @@ public class AiService(
     IConfiguration config,
     ILogger<AiService> log)
 {
-    private const int DailyFreeLimit = 10;
-    private const string Model = "claude-haiku-4-5-20251001";
+    private const int GenerateDailyLimit = 50;
+    private const int TranslateDailyLimit = 150;
+    private const string GenerateModel = "llama-3.3-70b-versatile";
+    private const string TranslateModel = "llama-3.1-8b-instant";
+    private const string Endpoint = "https://api.groq.com/openai/v1/chat/completions";
 
     public async Task<GeneratedTextResponse?> GenerateTextAsync(GenerateTextRequest req, Guid userId)
     {
         var user = await userService.GetAsync(userId);
         if (user is null) return null;
 
-        var apiKey = user.AnthropicApiKey ?? config["Anthropic:ApiKey"];
+        var apiKey = ResolveKey(user);
         var useFreeQuota = string.IsNullOrEmpty(user.AnthropicApiKey);
 
         if (useFreeQuota)
         {
             if (string.IsNullOrEmpty(apiKey)) throw new InvalidOperationException("No API key configured");
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
-            var usage = await db.AiUsage.FirstOrDefaultAsync(u => u.UserId == userId && u.Date == today);
-            if (usage is null)
-            {
-                usage = new AiUsage { UserId = userId, Date = today, RequestCount = 0 };
-                db.AiUsage.Add(usage);
-            }
-            if (usage.RequestCount >= DailyFreeLimit)
-            {
-                throw new InvalidOperationException($"Daily limit reached ({DailyFreeLimit}). Add your own Anthropic API key in profile settings for unlimited usage.");
-            }
-            usage.RequestCount++;
-            await db.SaveChangesAsync();
+            await ConsumeAsync(userId, AiUsageKind.Generate);
         }
 
         var prompt = BuildPrompt(req);
-        var text = await CallClaudeAsync(apiKey!, prompt);
+        var text = await CallGroqAsync(apiKey!, GenerateModel, prompt, 800);
 
-        int remaining = useFreeQuota ? await CalculateRemainingAsync(userId) : -1;
+        int remaining = useFreeQuota ? await CalculateRemainingAsync(userId, AiUsageKind.Generate) : -1;
         return new GeneratedTextResponse(text, remaining);
     }
 
@@ -55,43 +46,66 @@ public class AiService(
     {
         var user = await userService.GetAsync(userId);
         if (user is null) return null;
-        var apiKey = user.AnthropicApiKey ?? config["Anthropic:ApiKey"];
+        var apiKey = ResolveKey(user);
         if (string.IsNullOrEmpty(apiKey)) throw new InvalidOperationException("No API key configured");
 
-        var useFreeQuota = string.IsNullOrEmpty(user.AnthropicApiKey);
-        if (useFreeQuota)
+        if (string.IsNullOrEmpty(user.AnthropicApiKey))
         {
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
-            var usage = await db.AiUsage.FirstOrDefaultAsync(u => u.UserId == userId && u.Date == today);
-            if (usage is null)
-            {
-                usage = new AiUsage { UserId = userId, Date = today, RequestCount = 0 };
-                db.AiUsage.Add(usage);
-            }
-            if (usage.RequestCount >= DailyFreeLimit)
-            {
-                throw new InvalidOperationException($"Daily limit reached ({DailyFreeLimit}). Add your own Anthropic API key for unlimited usage.");
-            }
-            usage.RequestCount++;
-            await db.SaveChangesAsync();
+            await ConsumeAsync(userId, AiUsageKind.Translate);
         }
 
         var prompt = $"Translate the following German text to English. Return ONLY the English translation, no commentary:\n\n{text}";
-        return await CallClaudeAsync(apiKey, prompt);
+        return await CallGroqAsync(apiKey, TranslateModel, prompt, 400);
     }
 
-    public async Task<int> GetRemainingTodayAsync(Guid userId)
+    public async Task<(int GenerateRemaining, int TranslateRemaining)> GetRemainingTodayAsync(Guid userId)
     {
         var user = await userService.GetAsync(userId);
-        if (user?.AnthropicApiKey is not null) return -1; // unlimited with BYOK
-        return await CalculateRemainingAsync(userId);
+        if (user?.AnthropicApiKey is not null) return (-1, -1);
+        return (
+            await CalculateRemainingAsync(userId, AiUsageKind.Generate),
+            await CalculateRemainingAsync(userId, AiUsageKind.Translate));
     }
 
-    private async Task<int> CalculateRemainingAsync(Guid userId)
+    private string? ResolveKey(User user)
+        => user.AnthropicApiKey ?? config["Groq:ApiKey"] ?? config["Gemini:ApiKey"];
+
+    private enum AiUsageKind { Generate, Translate }
+
+    private async Task ConsumeAsync(Guid userId, AiUsageKind kind)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var usage = await db.AiUsage.FirstOrDefaultAsync(u => u.UserId == userId && u.Date == today);
-        return Math.Max(0, DailyFreeLimit - (usage?.RequestCount ?? 0));
+        if (usage is null)
+        {
+            usage = new AiUsage { UserId = userId, Date = today };
+            db.AiUsage.Add(usage);
+        }
+
+        if (kind == AiUsageKind.Generate)
+        {
+            if (usage.GenerateCount >= GenerateDailyLimit)
+                throw new InvalidOperationException($"Daily generate limit reached ({GenerateDailyLimit}). Add your own API key in profile settings for unlimited usage.");
+            usage.GenerateCount++;
+        }
+        else
+        {
+            if (usage.TranslateCount >= TranslateDailyLimit)
+                throw new InvalidOperationException($"Daily translate limit reached ({TranslateDailyLimit}). Add your own API key in profile settings for unlimited usage.");
+            usage.TranslateCount++;
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    private async Task<int> CalculateRemainingAsync(Guid userId, AiUsageKind kind)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var usage = await db.AiUsage.FirstOrDefaultAsync(u => u.UserId == userId && u.Date == today);
+        var (used, limit) = kind == AiUsageKind.Generate
+            ? (usage?.GenerateCount ?? 0, GenerateDailyLimit)
+            : (usage?.TranslateCount ?? 0, TranslateDailyLimit);
+        return Math.Max(0, limit - used);
     }
 
     private static string BuildPrompt(GenerateTextRequest req)
@@ -107,33 +121,41 @@ public class AiService(
         return sb.ToString();
     }
 
-    private async Task<string> CallClaudeAsync(string apiKey, string prompt)
+    private async Task<string> CallGroqAsync(string apiKey, string model, string prompt, int maxTokens)
     {
         var http = httpFactory.CreateClient();
-        http.DefaultRequestHeaders.Add("x-api-key", apiKey);
-        http.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
 
         var body = new
         {
-            model = Model,
-            max_tokens = 800,
-            messages = new[] { new { role = "user", content = prompt } }
+            model,
+            max_tokens = maxTokens,
+            temperature = 0.7,
+            messages = new[]
+            {
+                new { role = "user", content = prompt }
+            }
         };
 
-        var content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
-        var res = await http.PostAsync("https://api.anthropic.com/v1/messages", content);
+        using var request = new HttpRequestMessage(HttpMethod.Post, Endpoint)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json")
+        };
+        request.Headers.Add("Authorization", $"Bearer {apiKey}");
+
+        var res = await http.SendAsync(request);
         var json = await res.Content.ReadAsStringAsync();
 
         if (!res.IsSuccessStatusCode)
         {
-            log.LogError("Anthropic API error: {Status} {Body}", res.StatusCode, json);
-            throw new InvalidOperationException($"Anthropic API error: {res.StatusCode}");
+            log.LogError("Groq API error: {Status} {Body}", res.StatusCode, json);
+            throw new InvalidOperationException($"Groq API error: {res.StatusCode}");
         }
 
         using var doc = JsonDocument.Parse(json);
         var text = doc.RootElement
-            .GetProperty("content")[0]
-            .GetProperty("text")
+            .GetProperty("choices")[0]
+            .GetProperty("message")
+            .GetProperty("content")
             .GetString() ?? "";
         return text.Trim();
     }

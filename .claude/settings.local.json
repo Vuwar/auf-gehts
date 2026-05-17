@@ -25,7 +25,9 @@
       "Bash(curl -sL -o A.ogg -A \"Mozilla/5.0 \\(Windows NT 10.0; Win64; x64\\) AppleWebKit/537.36 \\(KHTML, like Gecko\\) Chrome/120.0.0.0 Safari/537.36\" -H \"Accept: audio/ogg,audio/*;q=0.9,*/*;q=0.8\" -H \"Accept-Language: en-US,en;q=0.9\" -H \"Referer: https://commons.wikimedia.org/wiki/File:De-A.ogg\" \"https://upload.wikimedia.org/wikipedia/commons/d/de/De-A.ogg\")",
       "Bash(curl -sL -A \"Mozilla/5.0\" -o test-gt.mp3 \"https://translate.google.com/translate_tts?ie=UTF-8&tl=de&client=tw-ob&q=A\")",
       "Bash(rm test-gt.mp3)",
-      "Bash(cd \"C:/Users/user/auf-gehts/client/public/audio/letters\" && rm -f *.ogg *.mp3 && bash _download.sh)"
+      "Bash(cd \"C:/Users/user/auf-gehts/client/public/audio/letters\" && rm -f *.ogg *.mp3 && bash _download.sh)",
+      "Bash(dir C:\\\\Users\\\\user\\\\auf-gehts /B)",
+      "PowerShell(dotnet build api.csproj -nologo -v quiet 2>&1)"
     ]
   }
 }

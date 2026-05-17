@@ -1,4 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.IO.Compression;
 using System.Text.Json.Serialization;
 using Api.Data;
 using Api.Middleware;
@@ -6,6 +7,8 @@ using Api.Repositories;
 using Api.Services;
 using Api.Utils;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.OutputCaching;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
@@ -91,19 +94,65 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 builder.Services.AddAuthorization();
 
+builder.Services.AddResponseCompression(opts =>
+{
+    opts.EnableForHttps = true;
+    opts.Providers.Add<BrotliCompressionProvider>();
+    opts.Providers.Add<GzipCompressionProvider>();
+    opts.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(new[] { "application/json" });
+});
+builder.Services.Configure<BrotliCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
+builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
+
+builder.Services.AddOutputCache(opts =>
+{
+    opts.AddBasePolicy(b => b.NoCache());
+    opts.AddPolicy("PerUser", b => b
+        .SetVaryByHeader("Authorization")
+        .Expire(TimeSpan.FromSeconds(30)));
+    opts.AddPolicy("Public60", b => b.Expire(TimeSpan.FromSeconds(60)));
+});
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
+app.UseResponseCompression();
 app.UseCors();
+app.UseOutputCache();
 
-using (var scope = app.Services.CreateScope())
+if (!string.Equals(Environment.GetEnvironmentVariable("SKIP_MIGRATIONS"), "true", StringComparison.OrdinalIgnoreCase))
 {
+    using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await db.Database.MigrateAsync();
-    await SeedData.SeedAsync(db);
+    var conn = db.Database.GetDbConnection();
+    await conn.OpenAsync();
+    try
+    {
+        // Advisory lock so concurrent replicas don't race on Migrate/Seed.
+        await using (var lockCmd = conn.CreateCommand())
+        {
+            lockCmd.CommandText = "SELECT pg_advisory_lock(727274001)";
+            await lockCmd.ExecuteNonQueryAsync();
+        }
+        try
+        {
+            await db.Database.MigrateAsync();
+            await SeedData.SeedAsync(db);
+        }
+        finally
+        {
+            await using var unlockCmd = conn.CreateCommand();
+            unlockCmd.CommandText = "SELECT pg_advisory_unlock(727274001)";
+            await unlockCmd.ExecuteNonQueryAsync();
+        }
+    }
+    finally
+    {
+        await conn.CloseAsync();
+    }
 }
 
 app.UseAuthentication();

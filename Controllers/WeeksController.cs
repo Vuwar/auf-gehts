@@ -2,6 +2,7 @@ using Api.DTOs.Responses;
 using Api.Repositories;
 using Api.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.OutputCaching;
 
 namespace Api.Controllers;
 
@@ -9,6 +10,7 @@ namespace Api.Controllers;
 public class WeeksController(WeekService service, IWeekRepository repo) : BaseController
 {
     [HttpGet]
+    [OutputCache(PolicyName = "PerUser")]
     public async Task<ActionResult<List<WeekResponse>>> List()
     {
         var userId = GetUserId();
@@ -17,6 +19,7 @@ public class WeeksController(WeekService service, IWeekRepository repo) : BaseCo
     }
 
     [HttpGet("{idOrNumber}")]
+    [OutputCache(PolicyName = "PerUser")]
     public async Task<ActionResult<WeekDetailResponse>> Get(string idOrNumber)
     {
         var userId = GetUserId();
