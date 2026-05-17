@@ -1,14 +1,19 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.IO.Compression;
 using System.Text.Json.Serialization;
+using System.Threading.Channels;
 using Api.Data;
 using Api.Middleware;
+using Api.Models;
 using Api.Repositories;
 using Api.Services;
+using Api.Services.Logging;
 using Api.Utils;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.OutputCaching;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.ResponseCompression;
+using System.Threading.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
@@ -30,6 +35,7 @@ builder.Services.AddControllers().AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
     options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+    options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
 });
 
 builder.Services.AddOpenApi();
@@ -49,8 +55,24 @@ builder.Services.AddMemoryCache();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<CurrentUserAccessor>();
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+// Logging pipeline
+builder.Services.AddSingleton(_ => Channel.CreateBounded<EventLog>(new BoundedChannelOptions(10_000)
+{
+    FullMode = BoundedChannelFullMode.DropOldest,
+    SingleReader = true,
+    SingleWriter = false,
+}));
+builder.Services.AddSingleton<IEventLog, EventLogService>();
+builder.Services.AddSingleton<ConcurrencyTracker>();
+builder.Services.AddSingleton<SlowQueryInterceptor>();
+builder.Services.AddScoped<DiagnosticAnalyzer>();
+builder.Services.AddHostedService<EventLogWorker>();
+
+builder.Services.AddDbContext<AppDbContext>((sp, options) =>
+{
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"));
+    options.AddInterceptors(sp.GetRequiredService<SlowQueryInterceptor>());
+});
 
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IWeekRepository, WeekRepository>();
@@ -104,6 +126,58 @@ builder.Services.AddResponseCompression(opts =>
 builder.Services.Configure<BrotliCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
 builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
 
+builder.Services.AddRateLimiter(opts =>
+{
+    opts.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
+    {
+        var key = ctx.User.FindFirst("sub")?.Value
+            ?? ctx.Connection.RemoteIpAddress?.ToString()
+            ?? "anon";
+        return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 120,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        });
+    });
+
+    opts.AddPolicy("ai", ctx =>
+    {
+        var key = ctx.User.FindFirst("sub")?.Value
+            ?? ctx.Connection.RemoteIpAddress?.ToString()
+            ?? "anon";
+        return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 20,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        });
+    });
+
+    opts.OnRejected = async (context, ct) =>
+    {
+        var events = context.HttpContext.RequestServices.GetRequiredService<IEventLog>();
+        var sub = context.HttpContext.User.FindFirst("sub")?.Value;
+        Guid? uid = Guid.TryParse(sub, out var g) ? g : null;
+        events.Write(
+            EventLogLevel.Warning,
+            "ratelimit.exceeded",
+            "Rate limit hit",
+            traceId: context.HttpContext.TraceIdentifier,
+            userId: uid,
+            endpoint: context.HttpContext.Request.Path,
+            httpMethod: context.HttpContext.Request.Method,
+            statusCode: 429,
+            source: "RateLimiter");
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retry))
+        {
+            context.HttpContext.Response.Headers["Retry-After"] = ((int)retry.TotalSeconds).ToString();
+        }
+        await context.HttpContext.Response.WriteAsync("Rate limit exceeded", ct);
+    };
+});
+
 builder.Services.AddOutputCache(opts =>
 {
     opts.AddBasePolicy(b => b.NoCache());
@@ -155,9 +229,11 @@ if (!string.Equals(Environment.GetEnvironmentVariable("SKIP_MIGRATIONS"), "true"
     }
 }
 
+app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<UserSyncMiddleware>();
+app.UseRateLimiter();
 app.MapControllers();
 
 app.Run();

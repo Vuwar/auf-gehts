@@ -3,6 +3,8 @@ import Library from './components/Library'
 import WordSetView from './components/WordSetView'
 import Dashboard from './components/Dashboard'
 import Reader from './components/Reader'
+import ReaderDetail from './components/ReaderDetail'
+import AdminLogs from './components/AdminLogs'
 import Profile from './components/Profile'
 import Login from './components/Login'
 import Abenteuer from './components/Abenteuer'
@@ -97,8 +99,10 @@ export default function App() {
             <Route path="/library" element={<Library />} />
             <Route path="/sets/:setSlug" element={<WordSetView />} />
             <Route path="/reader" element={<Reader />} />
+            <Route path="/reader/:id" element={<ReaderDetail />} />
             <Route path="/alphabet" element={<Alphabet />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/admin/logs" element={<AdminLogs />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>

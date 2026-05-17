@@ -2,10 +2,12 @@ using Api.DTOs.Requests;
 using Api.DTOs.Responses;
 using Api.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Api.Controllers;
 
 [Route("api/ai")]
+[EnableRateLimiting("ai")]
 public class AiController(AiService service) : BaseController
 {
     [HttpPost("generate-text")]

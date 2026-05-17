@@ -13,6 +13,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<WordCache> WordCache => Set<WordCache>();
     public DbSet<AiUsage> AiUsage => Set<AiUsage>();
     public DbSet<ReadingText> ReadingTexts => Set<ReadingText>();
+    public DbSet<ReadingTextQuestion> ReadingTextQuestions => Set<ReadingTextQuestion>();
+    public DbSet<EventLog> EventLogs => Set<EventLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -107,11 +109,43 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(e => e.Title).IsRequired();
             entity.Property(e => e.Content).IsRequired();
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
-            entity.HasIndex(e => e.IsPublic);
+            entity.HasIndex(e => e.WeekId);
+            entity.HasOne(e => e.Week)
+                  .WithMany(w => w.ReadingTexts)
+                  .HasForeignKey(e => e.WeekId)
+                  .OnDelete(DeleteBehavior.SetNull);
             entity.HasOne<User>()
                   .WithMany()
                   .HasForeignKey(e => e.CreatedByUserId)
                   .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<ReadingTextQuestion>(entity =>
+        {
+            entity.ToTable("reading_text_questions");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Prompt).IsRequired();
+            entity.HasIndex(e => e.ReadingTextId);
+            entity.HasOne<ReadingText>()
+                  .WithMany(r => r.Questions)
+                  .HasForeignKey(e => e.ReadingTextId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EventLog>(entity =>
+        {
+            entity.ToTable("event_logs");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+            entity.Property(e => e.Timestamp).HasDefaultValueSql("now()");
+            entity.Property(e => e.EventType).IsRequired();
+            entity.HasIndex(e => e.Timestamp);
+            entity.HasIndex(e => e.Level);
+            entity.HasIndex(e => e.EventType);
+            entity.HasIndex(e => e.TraceId);
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.Endpoint);
         });
 
         modelBuilder.Entity<WordCache>(entity =>

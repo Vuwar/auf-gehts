@@ -14,5 +14,14 @@ public record WeekDetailResponse(
     int Number,
     string Title,
     string? Description,
-    List<WordSetResponse> Sets
+    List<WordSetResponse> Sets,
+    List<ReadingTextSummaryResponse> ReadingTexts
+);
+
+public record ReadingTextSummaryResponse(
+    Guid Id,
+    string Title,
+    string? Level,
+    int QuestionCount,
+    int CharCount
 );

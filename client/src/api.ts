@@ -17,6 +17,15 @@ export interface WeekDetail {
   title: string
   description: string | null
   sets: WordSet[]
+  readingTexts: ReadingTextSummary[]
+}
+
+export interface ReadingTextSummary {
+  id: string
+  title: string
+  level: string | null
+  questionCount: number
+  charCount: number
 }
 
 export interface WordSet {
@@ -82,16 +91,29 @@ export interface GeneratedText {
 
 export type UserRole = 'Admin' | 'Default' | 'ViewOnly'
 
+export type ReadingQuestionType = 'MultipleChoice' | 'TrueFalse' | 'ShortAnswer' | 'FreeText'
+
+export interface ReadingTextQuestion {
+  id: string
+  displayOrder: number
+  type: ReadingQuestionType
+  prompt: string
+  options: string[] | null
+  correctAnswer: string | null
+}
+
 export interface ReadingText {
   id: string
   title: string
   content: string
   level: string | null
+  weekId: string | null
+  weekNumber: number | null
   createdByUserId: string | null
   createdByName: string | null
-  isPublic: boolean
   isOwner: boolean
   createdAt: string
+  questions: ReadingTextQuestion[]
 }
 
 export interface UserProfile {
@@ -125,6 +147,88 @@ export interface Dashboard {
   friends: FriendProgress[]
 }
 
+export type LogLevel = 'Info' | 'Warning' | 'Error' | 'Critical'
+
+export interface LogEntry {
+  id: number
+  timestamp: string
+  level: LogLevel
+  eventType: string
+  message: string | null
+  traceId: string | null
+  userId: string | null
+  endpoint: string | null
+  httpMethod: string | null
+  statusCode: number | null
+  durationMs: number | null
+  concurrency: number | null
+  source: string | null
+  metadataJson: string | null
+}
+
+export interface LogsPage {
+  total: number
+  page: number
+  pageSize: number
+  items: LogEntry[]
+}
+
+export interface LogQueryParams {
+  level?: LogLevel
+  eventType?: string
+  endpoint?: string
+  traceId?: string
+  userId?: string
+  minDurationMs?: number
+  since?: string
+  page?: number
+  pageSize?: number
+}
+
+export interface SlowEndpoint {
+  endpoint: string | null
+  count: number
+  avgMs: number
+  p95Ms: number
+  maxMs: number
+}
+
+export type FindingSeverity = 'high' | 'medium' | 'low' | 'info'
+
+export interface DiagnosticFinding {
+  severity: FindingSeverity
+  category: string
+  title: string
+  summary: string
+  evidence: Record<string, unknown>
+}
+
+export interface DiagnosticTotals {
+  requests: number
+  slowRequests: number
+  errors: number
+  p50Ms: number
+  p95Ms: number
+  p99Ms: number
+  concurrencyPeak: number
+}
+
+export interface DiagnosticReport {
+  windowHours: number
+  sinceUtc: string
+  totals: DiagnosticTotals
+  findings: DiagnosticFinding[]
+}
+
+export interface LogsStats {
+  sinceUtc: string
+  concurrencyCurrent: number
+  concurrencyPeak: number
+  byTypeAndLevel: { level: LogLevel; eventType: string; count: number }[]
+  slowEndpoints: SlowEndpoint[]
+  slowQueryCount: number
+}
+
 export class ApiError extends Error {
   status: number
   constructor(message: string, status: number) {
@@ -144,22 +248,68 @@ function notifyLoading() {
   loadingListeners.forEach(fn => fn(inflight))
 }
 
+// Client-side perf telemetry: buffer recent timings, flush periodically.
+interface ClientSample {
+  traceId?: string
+  url: string
+  method: string
+  status?: number
+  durationMs: number
+  started: string
+  network?: string
+}
+const sampleBuffer: ClientSample[] = []
+let lastTraceId: string | null = null
+export function getLastTraceId() { return lastTraceId }
+;(globalThis as any).__appTraces = sampleBuffer
+
+const FLUSH_INTERVAL_MS = 15_000
+const FLUSH_MAX = 50
+async function flushSamples() {
+  if (sampleBuffer.length === 0) return
+  const batch = sampleBuffer.splice(0, sampleBuffer.length)
+  try {
+    await fetch(`${API_BASE}/client-metrics`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bundleVersion: (import.meta.env.VITE_BUNDLE_VERSION as string) ?? 'dev',
+        samples: batch.slice(0, 100),
+      }),
+      keepalive: true,
+    })
+  } catch {
+    // Drop on failure; don't requeue to avoid loops.
+  }
+}
+if (typeof window !== 'undefined') {
+  setInterval(flushSamples, FLUSH_INTERVAL_MS)
+  window.addEventListener('beforeunload', flushSamples)
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   inflight++
   notifyLoading()
+  const started = performance.now()
+  const startedIso = new Date().toISOString()
+  const method = (options?.method ?? 'GET').toUpperCase()
+  const network = (navigator as any).connection?.effectiveType
+  let res: Response | null = null
   try {
   const { data: sessionData } = await supabase.auth.getSession()
   const token = sessionData.session?.access_token
-  let res: Response
   try {
     res = await fetch(url, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(lastTraceId ? { 'X-Client-Trace-Id': lastTraceId } : {}),
         ...options?.headers,
       },
     })
+    const tid = res.headers.get('x-trace-id')
+    if (tid) lastTraceId = tid
   } catch {
     throw new ApiError('Network error', 0)
   }
@@ -183,6 +333,17 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   } finally {
     inflight = Math.max(0, inflight - 1)
     notifyLoading()
+    const duration = Math.round(performance.now() - started)
+    sampleBuffer.push({
+      traceId: res?.headers.get('x-trace-id') ?? undefined,
+      url: url.replace(API_BASE, '/api'),
+      method,
+      status: res?.status,
+      durationMs: duration,
+      started: startedIso,
+      network,
+    })
+    if (sampleBuffer.length >= FLUSH_MAX) flushSamples()
   }
 }
 
@@ -286,13 +447,24 @@ export const api = {
   vocabFronts: () => request<string[]>(`${API_BASE}/vocab/fronts`),
 
   listReadingTexts: () => request<ReadingText[]>(`${API_BASE}/reading-texts`),
-  createReadingText: (data: { title: string; content: string; level?: string; isPublic?: boolean }) =>
+  getReadingText: (id: string) => request<ReadingText>(`${API_BASE}/reading-texts/${id}`),
+  createReadingText: (data: {
+    title: string; content: string; level?: string; weekId?: string | null;
+    questions?: { type: ReadingQuestionType; prompt: string; options?: string[] | null; correctAnswer?: string | null }[]
+  }) =>
     request<ReadingText>(`${API_BASE}/reading-texts`, {
       method: 'POST',
       body: JSON.stringify({
         title: data.title, content: data.content,
-        level: data.level ?? null, isPublic: data.isPublic ?? true,
+        level: data.level ?? null,
+        weekId: data.weekId ?? null,
+        questions: data.questions ?? null,
       }),
+    }),
+  generateQuestions: (content: string, level?: string, count: number = 4) =>
+    request<{ questions: ReadingTextQuestion[] }>(`${API_BASE}/reading-texts/generate-questions`, {
+      method: 'POST',
+      body: JSON.stringify({ content, level: level ?? null, count }),
     }),
   deleteReadingText: (id: string) => request<void>(`${API_BASE}/reading-texts/${id}`, { method: 'DELETE' }),
 
@@ -306,6 +478,23 @@ export const api = {
       }),
     }),
   adminListUsers: () => request<UserProfile[]>(`${API_BASE}/admin/users`),
+  adminLogsStats: (hours: number = 1) =>
+    request<LogsStats>(`${API_BASE}/admin/logs/stats?hours=${hours}`),
+  adminLogsDiagnose: (hours: number = 1) =>
+    request<DiagnosticReport>(`${API_BASE}/admin/logs/diagnose?hours=${hours}`),
+  adminQueryLogs: (params: LogQueryParams) => {
+    const q = new URLSearchParams()
+    if (params.level) q.set('level', params.level)
+    if (params.eventType) q.set('eventType', params.eventType)
+    if (params.endpoint) q.set('endpoint', params.endpoint)
+    if (params.traceId) q.set('traceId', params.traceId)
+    if (params.userId) q.set('userId', params.userId)
+    if (params.minDurationMs) q.set('minDurationMs', String(params.minDurationMs))
+    if (params.since) q.set('since', params.since)
+    if (params.page) q.set('page', String(params.page))
+    if (params.pageSize) q.set('pageSize', String(params.pageSize))
+    return request<LogsPage>(`${API_BASE}/admin/logs?${q.toString()}`)
+  },
   adminSetUserRole: (id: string, role: UserRole) =>
     request<UserProfile>(`${API_BASE}/admin/users/${id}/role`, {
       method: 'PUT',

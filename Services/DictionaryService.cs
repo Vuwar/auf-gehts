@@ -3,11 +3,12 @@ using System.Text.RegularExpressions;
 using Api.Data;
 using Api.DTOs.Responses;
 using Api.Models;
+using Api.Services.Logging;
 using Microsoft.EntityFrameworkCore;
 
 namespace Api.Services;
 
-public class DictionaryService(IHttpClientFactory httpFactory, AppDbContext db, ILogger<DictionaryService> log)
+public class DictionaryService(IHttpClientFactory httpFactory, AppDbContext db, ILogger<DictionaryService> log, IEventLog events)
 {
     private static readonly TimeSpan CacheTtl = TimeSpan.FromDays(30);
 
@@ -20,8 +21,10 @@ public class DictionaryService(IHttpClientFactory httpFactory, AppDbContext db, 
         var cached = await db.WordCache.FirstOrDefaultAsync(w => w.Word == key);
         if (cached is not null && DateTime.UtcNow - cached.CachedAt < CacheTtl)
         {
+            events.Info("cache.hit", "word_cache", metadata: new { key });
             return JsonSerializer.Deserialize<WordLookupResponse>(cached.PayloadJson);
         }
+        events.Info("cache.miss", "word_cache", metadata: new { key });
 
         var http = httpFactory.CreateClient();
         http.DefaultRequestHeaders.UserAgent.ParseAdd("aufgehts/1.0 (German learning app)");

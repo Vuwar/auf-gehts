@@ -1,9 +1,11 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Api.Data;
 using Api.DTOs.Requests;
 using Api.DTOs.Responses;
 using Api.Models;
+using Api.Services.Logging;
 using Microsoft.EntityFrameworkCore;
 
 namespace Api.Services;
@@ -13,7 +15,8 @@ public class AiService(
     AppDbContext db,
     UserService userService,
     IConfiguration config,
-    ILogger<AiService> log)
+    ILogger<AiService> log,
+    IEventLog events)
 {
     private const int GenerateDailyLimit = 50;
     private const int TranslateDailyLimit = 150;
@@ -56,6 +59,65 @@ public class AiService(
 
         var prompt = $"Translate the following German text to English. Return ONLY the English translation, no commentary:\n\n{text}";
         return await CallGroqAsync(apiKey, TranslateModel, prompt, 400);
+    }
+
+    public async Task<List<DTOs.Responses.ReadingTextQuestionResponse>> GenerateQuestionsAsync(string content, string? level, int count, Guid userId)
+    {
+        var user = await userService.GetAsync(userId);
+        if (user is null) throw new InvalidOperationException("User not found");
+        var apiKey = ResolveKey(user);
+        if (string.IsNullOrEmpty(apiKey)) throw new InvalidOperationException("No API key configured");
+
+        if (string.IsNullOrEmpty(user.AnthropicApiKey))
+        {
+            await ConsumeAsync(userId, AiUsageKind.Generate);
+        }
+
+        var n = Math.Clamp(count, 1, 8);
+        var prompt = $@"You are creating comprehension questions for a German reading text at CEFR level {level ?? "B1"}.
+Text:
+---
+{content}
+---
+Generate {n} questions of mixed types. Return ONLY valid JSON, no markdown, no preamble.
+Schema: an array of objects with fields: type (""MultipleChoice""|""TrueFalse""|""ShortAnswer""|""FreeText""), prompt (string, in German), options (array of 4 strings for MultipleChoice, [""Richtig"",""Falsch""] for TrueFalse, null otherwise), correctAnswer (string matching one option for MultipleChoice, ""Richtig""/""Falsch"" for TrueFalse, expected answer for ShortAnswer, null for FreeText).
+Mix the types. Output only the JSON array.";
+
+        var raw = await CallGroqAsync(apiKey, GenerateModel, prompt, 1200);
+        var jsonText = ExtractJsonArray(raw);
+        var parsed = new List<DTOs.Responses.ReadingTextQuestionResponse>();
+        try
+        {
+            using var doc = JsonDocument.Parse(jsonText);
+            int order = 0;
+            foreach (var el in doc.RootElement.EnumerateArray())
+            {
+                var type = el.TryGetProperty("type", out var tp) ? (tp.GetString() ?? "FreeText") : "FreeText";
+                var promptText = el.TryGetProperty("prompt", out var pp) ? (pp.GetString() ?? "") : "";
+                List<string>? options = null;
+                if (el.TryGetProperty("options", out var op) && op.ValueKind == JsonValueKind.Array)
+                {
+                    options = op.EnumerateArray().Select(x => x.GetString() ?? "").ToList();
+                }
+                var correct = el.TryGetProperty("correctAnswer", out var ca) && ca.ValueKind != JsonValueKind.Null ? ca.GetString() : null;
+                if (string.IsNullOrWhiteSpace(promptText)) continue;
+                parsed.Add(new DTOs.Responses.ReadingTextQuestionResponse(Guid.Empty, order++, type, promptText, options, correct));
+            }
+        }
+        catch (Exception ex)
+        {
+            log.LogError(ex, "Failed parsing generated questions JSON: {Raw}", raw);
+            throw new InvalidOperationException("AI returned invalid question format");
+        }
+        return parsed;
+    }
+
+    private static string ExtractJsonArray(string raw)
+    {
+        var start = raw.IndexOf('[');
+        var end = raw.LastIndexOf(']');
+        if (start >= 0 && end > start) return raw.Substring(start, end - start + 1);
+        return raw;
     }
 
     public async Task<(int GenerateRemaining, int TranslateRemaining)> GetRemainingTodayAsync(Guid userId)
@@ -124,6 +186,7 @@ public class AiService(
     private async Task<string> CallGroqAsync(string apiKey, string model, string prompt, int maxTokens)
     {
         var http = httpFactory.CreateClient();
+        var sw = Stopwatch.StartNew();
 
         var body = new
         {
@@ -142,21 +205,42 @@ public class AiService(
         };
         request.Headers.Add("Authorization", $"Bearer {apiKey}");
 
-        var res = await http.SendAsync(request);
-        var json = await res.Content.ReadAsStringAsync();
-
-        if (!res.IsSuccessStatusCode)
+        HttpResponseMessage? res = null;
+        try
         {
-            log.LogError("Groq API error: {Status} {Body}", res.StatusCode, json);
-            throw new InvalidOperationException($"Groq API error: {res.StatusCode}");
-        }
+            res = await http.SendAsync(request);
+            var json = await res.Content.ReadAsStringAsync();
+            sw.Stop();
 
-        using var doc = JsonDocument.Parse(json);
-        var text = doc.RootElement
-            .GetProperty("choices")[0]
-            .GetProperty("message")
-            .GetProperty("content")
-            .GetString() ?? "";
-        return text.Trim();
+            if (!res.IsSuccessStatusCode)
+            {
+                log.LogError("Groq API error: {Status} {Body}", res.StatusCode, json);
+                events.Error("ai.upstream_error", $"Groq {(int)res.StatusCode}",
+                    metadata: new { model, durationMs = sw.ElapsedMilliseconds, status = (int)res.StatusCode, promptChars = prompt.Length });
+                throw new InvalidOperationException($"Groq API error: {res.StatusCode}");
+            }
+
+            using var doc = JsonDocument.Parse(json);
+            var text = doc.RootElement
+                .GetProperty("choices")[0]
+                .GetProperty("message")
+                .GetProperty("content")
+                .GetString() ?? "";
+
+            var level = sw.ElapsedMilliseconds > 5000 ? EventLogLevel.Warning : EventLogLevel.Info;
+            events.Write(level, "ai.call_ok", $"Groq {model}",
+                durationMs: sw.ElapsedMilliseconds,
+                source: "AiService",
+                metadata: new { model, promptChars = prompt.Length, responseChars = text.Length });
+
+            return text.Trim();
+        }
+        catch (Exception ex) when (ex is not InvalidOperationException)
+        {
+            sw.Stop();
+            events.Error("ai.exception", ex.Message,
+                metadata: new { model, durationMs = sw.ElapsedMilliseconds, exception = ex.GetType().Name });
+            throw;
+        }
     }
 }

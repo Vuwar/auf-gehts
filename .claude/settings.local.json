@@ -27,7 +27,8 @@
       "Bash(rm test-gt.mp3)",
       "Bash(cd \"C:/Users/user/auf-gehts/client/public/audio/letters\" && rm -f *.ogg *.mp3 && bash _download.sh)",
       "Bash(dir C:\\\\Users\\\\user\\\\auf-gehts /B)",
-      "PowerShell(dotnet build api.csproj -nologo -v quiet 2>&1)"
+      "PowerShell(dotnet build api.csproj -nologo -v quiet 2>&1)",
+      "Bash(echo \"EXIT=$?\")"
     ]
   }
 }

@@ -57,7 +57,13 @@ public class WeekService(
             r.Set.ToResponse(userId, r.WordCount, statuses.GetValueOrDefault(r.Set.Id, Models.ProgressStatus.NotStarted))
         ).ToList();
 
-        return new WeekDetailResponse(week.Id, week.Number, week.Title, week.Description, setResponses);
+        var texts = await db.ReadingTexts
+            .Where(t => t.WeekId == id)
+            .OrderByDescending(t => t.CreatedAt)
+            .Select(t => new ReadingTextSummaryResponse(t.Id, t.Title, t.Level, t.Questions.Count, t.Content.Length))
+            .ToListAsync();
+
+        return new WeekDetailResponse(week.Id, week.Number, week.Title, week.Description, setResponses, texts);
     }
 
     public async Task<(Week? week, string? error)> CreateAsync(CreateWeekRequest req)

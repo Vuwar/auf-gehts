@@ -97,6 +97,22 @@ export default function Abenteuer() {
           </div>
         )}
 
+        <h2 className="section-title">Reading texts</h2>
+        {detail.readingTexts.length === 0 && <p className="empty-state">No texts assigned to this week.</p>}
+        <ul className="deck-list">
+          {detail.readingTexts.map(t => (
+            <li key={t.id} className="deck-item">
+              <button onClick={() => nav(`/reader/${t.id}`)} className="deck-item-main">
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span>{t.title}</span>
+                  {t.level && <span className="starter-level">{t.level}</span>}
+                  <span className="deck-item-count">· {t.questionCount} questions · {t.charCount} chars</span>
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+
         {editingWeek && (
           <EditWeekSheet
             week={detail}

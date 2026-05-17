@@ -9,4 +9,5 @@ public class Week
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public List<WordSet> WordSets { get; set; } = [];
+    public List<ReadingText> ReadingTexts { get; set; } = [];
 }
