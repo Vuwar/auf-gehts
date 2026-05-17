@@ -15,4 +15,12 @@ public class VocabController(VocabService service) : BaseController
         if (userId is null) return Unauthorized();
         return Ok(await service.SaveAsync(req, userId.Value));
     }
+
+    [HttpGet("fronts")]
+    public async Task<ActionResult<List<string>>> Fronts()
+    {
+        var userId = GetUserId();
+        if (userId is null) return Unauthorized();
+        return Ok(await service.GetFrontsAsync(userId.Value));
+    }
 }

@@ -66,6 +66,7 @@ builder.Services.AddScoped<StatsService>();
 builder.Services.AddScoped<DashboardService>();
 builder.Services.AddScoped<DictionaryService>();
 builder.Services.AddScoped<AiService>();
+builder.Services.AddScoped<ReadingTextService>();
 
 var projectRef = builder.Configuration["Supabase:ProjectRef"]
     ?? throw new InvalidOperationException("Supabase:ProjectRef missing");

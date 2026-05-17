@@ -82,6 +82,18 @@ export interface GeneratedText {
 
 export type UserRole = 'Admin' | 'Default' | 'ViewOnly'
 
+export interface ReadingText {
+  id: string
+  title: string
+  content: string
+  level: string | null
+  createdByUserId: string | null
+  createdByName: string | null
+  isPublic: boolean
+  isOwner: boolean
+  createdAt: string
+}
+
 export interface UserProfile {
   id: string
   email: string
@@ -121,7 +133,21 @@ export class ApiError extends Error {
   }
 }
 
+// Loading progress: tracks inflight request count, notifies subscribers.
+let inflight = 0
+const loadingListeners = new Set<(count: number) => void>()
+export function onLoadingChange(fn: (count: number) => void) {
+  loadingListeners.add(fn)
+  return () => { loadingListeners.delete(fn) }
+}
+function notifyLoading() {
+  loadingListeners.forEach(fn => fn(inflight))
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
+  inflight++
+  notifyLoading()
+  try {
   const { data: sessionData } = await supabase.auth.getSession()
   const token = sessionData.session?.access_token
   let res: Response
@@ -154,6 +180,10 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   }
   if (res.status === 204) return undefined as T
   return res.json()
+  } finally {
+    inflight = Math.max(0, inflight - 1)
+    notifyLoading()
+  }
 }
 
 export const api = {
@@ -248,6 +278,23 @@ export const api = {
       body: JSON.stringify({ topic, level, wordCount: wordCount ?? null, wordsToInclude: null }),
     }),
   aiUsage: () => request<{ remaining: number }>(`${API_BASE}/ai/usage`),
+  translate: (text: string) => request<{ translation: string }>(`${API_BASE}/ai/translate`, {
+    method: 'POST',
+    body: JSON.stringify({ text }),
+  }),
+
+  vocabFronts: () => request<string[]>(`${API_BASE}/vocab/fronts`),
+
+  listReadingTexts: () => request<ReadingText[]>(`${API_BASE}/reading-texts`),
+  createReadingText: (data: { title: string; content: string; level?: string; isPublic?: boolean }) =>
+    request<ReadingText>(`${API_BASE}/reading-texts`, {
+      method: 'POST',
+      body: JSON.stringify({
+        title: data.title, content: data.content,
+        level: data.level ?? null, isPublic: data.isPublic ?? true,
+      }),
+    }),
+  deleteReadingText: (id: string) => request<void>(`${API_BASE}/reading-texts/${id}`, { method: 'DELETE' }),
 
   getMe: () => request<UserProfile>(`${API_BASE}/me`),
   updateMe: (displayName?: string, anthropicApiKey?: string) =>

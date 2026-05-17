@@ -56,6 +56,9 @@ export default function UserMenu() {
           <Link to="/profile" onClick={() => setOpen(false)} className="user-menu-item">
             <span>⚙️</span> Settings
           </Link>
+          <Link to="/alphabet" onClick={() => setOpen(false)} className="user-menu-item">
+            <span>🔤</span> Alphabet
+          </Link>
           <button onClick={handleSignOut} className="user-menu-item">
             <span>↩</span> Sign out
           </button>

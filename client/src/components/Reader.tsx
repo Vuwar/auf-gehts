@@ -1,12 +1,18 @@
-import { useEffect, useState } from 'react'
-import { api, type WordLookup } from '../api'
+import { useEffect, useMemo, useState } from 'react'
+import { api, type WordLookup, type ReadingText } from '../api'
 import ErrorView from './ErrorView'
+import SpeakerIcon from './SpeakerIcon'
+import { speakGerman } from '../tts'
 
-type Mode = 'paste' | 'generate'
+type Mode = 'paste' | 'generate' | 'library'
 
 export default function Reader() {
   const [mode, setMode] = useState<Mode>('paste')
-  const [text, setText] = useState('')
+
+  // Separate paste vs generated state
+  const [pastedText, setPastedText] = useState('')
+  const [generatedText, setGeneratedText] = useState('')
+
   const [topic, setTopic] = useState('')
   const [level, setLevel] = useState('A2')
   const [wordCount, setWordCount] = useState(150)
@@ -21,8 +27,20 @@ export default function Reader() {
   const [overrideBack, setOverrideBack] = useState('')
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
 
+  const [translation, setTranslation] = useState<string | null>(null)
+  const [translating, setTranslating] = useState(false)
+
+  const [vocabFronts, setVocabFronts] = useState<Set<string>>(new Set())
+  const [sharedTexts, setSharedTexts] = useState<ReadingText[]>([])
+  const [librarySearch, setLibrarySearch] = useState('')
+
+  // Active text = the one user is currently reading
+  const activeText = mode === 'generate' ? generatedText : pastedText
+
   useEffect(() => {
     api.aiUsage().then(u => setRemaining(u.remaining)).catch(() => {})
+    api.vocabFronts().then(list => setVocabFronts(new Set(list.map(f => normalize(f))))).catch(() => {})
+    api.listReadingTexts().then(setSharedTexts).catch(() => {})
   }, [])
 
   const generate = async () => {
@@ -31,7 +49,7 @@ export default function Reader() {
     setGenerateError(null)
     try {
       const result = await api.generateText(topic.trim(), level, wordCount)
-      setText(result.text)
+      setGeneratedText(result.text)
       if (result.remainingToday >= 0) setRemaining(result.remainingToday)
     } catch (e) {
       setGenerateError(e)
@@ -40,9 +58,41 @@ export default function Reader() {
     }
   }
 
+  const translate = async () => {
+    if (!activeText.trim()) return
+    setTranslating(true)
+    try {
+      const r = await api.translate(activeText)
+      setTranslation(r.translation)
+    } catch (e: any) {
+      alert(e.message)
+    } finally {
+      setTranslating(false)
+    }
+  }
+
+  const loadSharedText = (t: ReadingText) => {
+    setPastedText(t.content)
+    setMode('paste')
+    setTranslation(null)
+  }
+
+  const saveText = async () => {
+    if (!pastedText.trim()) return
+    const title = prompt('Title for this text?')
+    if (!title?.trim()) return
+    try {
+      const t = await api.createReadingText({ title: title.trim(), content: pastedText, isPublic: true })
+      setSharedTexts([t, ...sharedTexts])
+      alert('Shared with everyone')
+    } catch (e: any) {
+      alert(e.message)
+    }
+  }
+
   const renderText = () => {
-    if (!text) return null
-    const sentences = text.split(/(?<=[.!?])\s+/)
+    if (!activeText) return null
+    const sentences = activeText.split(/(?<=[.!?])\s+/)
     return (
       <div className="reader-text">
         {sentences.map((sentence, sIdx) => (
@@ -50,10 +100,11 @@ export default function Reader() {
             {tokenize(sentence).map((tok, i) => {
               if (tok.isWord) {
                 const isSelected = selectedWord?.toLowerCase() === tok.text.toLowerCase()
+                const isSaved = vocabFronts.has(normalize(tok.text))
                 return (
                   <span
                     key={i}
-                    className={`reader-word ${isSelected ? 'selected' : ''}`}
+                    className={`reader-word ${isSelected ? 'selected' : ''} ${isSaved ? 'saved' : ''}`}
                     onClick={() => selectWord(tok.text, sentence.trim())}
                   >
                     {tok.text}
@@ -87,9 +138,16 @@ export default function Reader() {
     const back = overrideBack.trim() || lookup.translation || ''
     if (!back) { alert('No translation — type one'); return }
     await api.saveToVocab(front, back, selectedSentence ?? undefined)
+    setVocabFronts(new Set([...vocabFronts, normalize(lookup.word)]))
     setSavedMsg(`Saved "${front}" to My Vocabulary`)
     setTimeout(() => setSavedMsg(null), 2500)
   }
+
+  const filteredShared = useMemo(() => {
+    const q = librarySearch.toLowerCase().trim()
+    if (!q) return sharedTexts
+    return sharedTexts.filter(t => t.title.toLowerCase().includes(q))
+  }, [sharedTexts, librarySearch])
 
   return (
     <div className="deck reader-layout">
@@ -99,14 +157,32 @@ export default function Reader() {
         <div className="tab-toggle">
           <button onClick={() => setMode('paste')} className={`tab-toggle-btn ${mode === 'paste' ? 'active' : ''}`}>Paste text</button>
           <button onClick={() => setMode('generate')} className={`tab-toggle-btn ${mode === 'generate' ? 'active' : ''}`}>Generate with AI</button>
+          <button onClick={() => setMode('library')} className={`tab-toggle-btn ${mode === 'library' ? 'active' : ''}`}>Library</button>
         </div>
 
-        {mode === 'paste' ? (
+        {mode === 'paste' && (
           <div className="form-row">
-            <p className="hint">Paste German text. Click any word to look it up and save to My Vocabulary.</p>
-            <textarea value={text} onChange={e => setText(e.target.value)} rows={6} placeholder="Paste German text here..." />
+            <p className="hint">Paste German text. Click any word to look it up. Saved words are highlighted.</p>
+            <textarea value={pastedText} onChange={e => { setPastedText(e.target.value); setTranslation(null) }} rows={6} placeholder="Paste German text here..." />
+            {pastedText.trim() && (
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button onClick={translate} disabled={translating} className="deck-btn">
+                  {translating ? 'Translating...' : '🌐 Show translation'}
+                </button>
+                <button onClick={saveText} className="deck-btn">📤 Share text</button>
+              </div>
+            )}
+            {translation && (
+              <div className="reader-translation">
+                <span className="card-label">English translation</span>
+                <p>{translation}</p>
+                <button onClick={() => setTranslation(null)} className="deck-btn" style={{ alignSelf: 'flex-start', marginTop: '6px' }}>Hide</button>
+              </div>
+            )}
           </div>
-        ) : (
+        )}
+
+        {mode === 'generate' && (
           <div className="form-row">
             <p className="hint">
               AI generates text using Claude Haiku.
@@ -125,16 +201,49 @@ export default function Reader() {
               {generating ? 'Generating...' : 'Generate'}
             </button>
             {generateError !== null && <ErrorView error={generateError} context="ai" compact onRetry={() => { setGenerateError(null); generate() }} />}
-            {text && (
+            {generatedText && (
               <div className="form-row" style={{ marginTop: '8px' }}>
                 <p className="hint">Generated text:</p>
-                <textarea value={text} onChange={e => setText(e.target.value)} rows={6} />
+                <textarea value={generatedText} onChange={e => setGeneratedText(e.target.value)} rows={6} />
+                <button onClick={translate} disabled={translating} className="deck-btn" style={{ alignSelf: 'flex-start' }}>
+                  {translating ? 'Translating...' : '🌐 Show translation'}
+                </button>
+                {translation && (
+                  <div className="reader-translation">
+                    <span className="card-label">English translation</span>
+                    <p>{translation}</p>
+                    <button onClick={() => setTranslation(null)} className="deck-btn" style={{ alignSelf: 'flex-start', marginTop: '6px' }}>Hide</button>
+                  </div>
+                )}
               </div>
             )}
           </div>
         )}
 
-        {text && renderText()}
+        {mode === 'library' && (
+          <div className="form-row">
+            <p className="hint">Texts shared by everyone. Pick one to read + save words.</p>
+            <input type="text" placeholder="Search titles..." value={librarySearch} onChange={e => setLibrarySearch(e.target.value)} />
+            {filteredShared.length === 0 ? (
+              <p className="empty-state">No shared texts yet.</p>
+            ) : (
+              <ul className="deck-list">
+                {filteredShared.map(t => (
+                  <li key={t.id} className="deck-item">
+                    <button onClick={() => loadSharedText(t)} className="deck-item-main">
+                      <strong>{t.title}</strong>
+                      <div className="hint" style={{ marginTop: '4px' }}>
+                        {t.createdByName ?? 'Unknown'} · {t.content.length} chars
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {activeText && mode !== 'library' && renderText()}
       </div>
 
       <aside className="reader-side">
@@ -146,6 +255,7 @@ export default function Reader() {
           <div className="reader-side-content">
             <div className="lookup-header">
               <strong>{lookup.gender ? `${lookup.gender} ` : ''}{lookup.word}</strong>
+              <button onClick={() => speakGerman(lookup.word)} className="word-speaker" aria-label="Speak"><SpeakerIcon /></button>
               {lookup.plural && <span className="hint">plural: {lookup.plural}</span>}
             </div>
             {lookup.translation && <p>→ {lookup.translation}</p>}
@@ -185,4 +295,8 @@ function tokenize(text: string): { text: string; isWord: boolean }[] {
     else tokens.push({ text: m[2], isWord: false })
   }
   return tokens
+}
+
+function normalize(s: string): string {
+  return s.toLowerCase().replace(/^(der|die|das)\s+/, '').trim()
 }

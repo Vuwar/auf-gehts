@@ -7,6 +7,8 @@ import Profile from './components/Profile'
 import Login from './components/Login'
 import Abenteuer from './components/Abenteuer'
 import UserMenu from './components/UserMenu'
+import Alphabet from './components/Alphabet'
+import LoadingBar from './components/LoadingBar'
 import { AuthProvider, useAuth } from './auth'
 import './App.css'
 
@@ -69,6 +71,7 @@ function ProtectedLayout() {
 
   return (
     <div className="app-shell">
+      <LoadingBar />
       <TopBar />
       <main className="app-content">
         <Outlet />
@@ -94,6 +97,7 @@ export default function App() {
             <Route path="/library" element={<Library />} />
             <Route path="/sets/:setSlug" element={<WordSetView />} />
             <Route path="/reader" element={<Reader />} />
+            <Route path="/alphabet" element={<Alphabet />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>

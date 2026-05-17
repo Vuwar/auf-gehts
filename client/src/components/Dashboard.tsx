@@ -122,6 +122,11 @@ export default function Dashboard() {
           <strong>Reader</strong>
           <span className="hint">Paste/generate text, save words</span>
         </button>
+        <button className="action-card" onClick={() => nav('/alphabet')}>
+          <span className="action-icon">🔤</span>
+          <strong>Alphabet</strong>
+          <span className="hint">German letter pronunciation</span>
+        </button>
       </div>
     </div>
   )

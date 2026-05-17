@@ -32,4 +32,21 @@ public class AiController(AiService service) : BaseController
         var remaining = await service.GetRemainingTodayAsync(userId.Value);
         return Ok(new { remaining });
     }
+
+    [HttpPost("translate")]
+    public async Task<ActionResult<DTOs.Responses.TranslateResponse>> Translate([FromBody] DTOs.Requests.TranslateRequest req)
+    {
+        var userId = GetUserId();
+        if (userId is null) return Unauthorized();
+        if (string.IsNullOrWhiteSpace(req.Text)) return BadRequest(new { error = "Empty text" });
+        try
+        {
+            var translation = await service.TranslateAsync(req.Text, userId.Value);
+            return translation is null ? NotFound() : Ok(new DTOs.Responses.TranslateResponse(translation));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
 }

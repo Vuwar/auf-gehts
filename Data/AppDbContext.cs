@@ -12,6 +12,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<UserSetProgress> UserSetProgress => Set<UserSetProgress>();
     public DbSet<WordCache> WordCache => Set<WordCache>();
     public DbSet<AiUsage> AiUsage => Set<AiUsage>();
+    public DbSet<ReadingText> ReadingTexts => Set<ReadingText>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -96,6 +97,21 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
             entity.HasIndex(e => new { e.UserId, e.Date }).IsUnique();
+        });
+
+        modelBuilder.Entity<ReadingText>(entity =>
+        {
+            entity.ToTable("reading_texts");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Title).IsRequired();
+            entity.Property(e => e.Content).IsRequired();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.HasIndex(e => e.IsPublic);
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(e => e.CreatedByUserId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<WordCache>(entity =>

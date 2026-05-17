@@ -5,6 +5,7 @@ import { useAuth } from '../auth'
 import EditWeekSheet from './EditWeekSheet'
 import CreateSetForWeekSheet from './CreateSetForWeekSheet'
 import AssignExistingSetSheet from './AssignExistingSetSheet'
+import CreateWeekSheet from './CreateWeekSheet'
 
 export default function Abenteuer() {
   const { weekSlug } = useParams<{ weekSlug?: string }>()
@@ -16,6 +17,7 @@ export default function Abenteuer() {
   const [editingWeek, setEditingWeek] = useState(false)
   const [creatingSet, setCreatingSet] = useState(false)
   const [assigningExisting, setAssigningExisting] = useState(false)
+  const [creatingWeek, setCreatingWeek] = useState(false)
   const [confirmDeleteSet, setConfirmDeleteSet] = useState<string | null>(null)
   const nav = useNavigate()
 
@@ -124,10 +126,23 @@ export default function Abenteuer() {
   return (
     <div className="deck">
       <div className="deck-header">
-        <h1>Abenteuer</h1>
-        <span className="deck-progress">Your German journey</span>
+        <div>
+          <h1>Abenteuer</h1>
+          <span className="deck-progress">Your German journey</span>
+        </div>
+        {isAdmin && (
+          <button onClick={() => setCreatingWeek(true)} className="deck-btn primary">+ Add week</button>
+        )}
       </div>
       <p className="hint">Work through each week in order, or jump around.</p>
+
+      {creatingWeek && (
+        <CreateWeekSheet
+          nextNumber={(weeks[weeks.length - 1]?.number ?? 0) + 1}
+          onClose={() => setCreatingWeek(false)}
+          onCreated={() => api.listWeeks().then(setWeeks)}
+        />
+      )}
 
       <div className="weeks-grid">
         {weeks.map(w => {

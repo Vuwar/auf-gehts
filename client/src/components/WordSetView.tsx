@@ -6,6 +6,8 @@ import FlashCard from './FlashCard'
 import EditSetSheet, { PenIcon } from './EditSetSheet'
 import HoldToConfirm from './HoldToConfirm'
 import ErrorView from './ErrorView'
+import SpeakerIcon from './SpeakerIcon'
+import { speakGerman } from '../tts'
 
 type View = 'list' | 'study'
 
@@ -107,6 +109,13 @@ export default function WordSetView() {
     await api.setProgress(setId, 'Active')
     setSet({ ...set, progressStatus: 'Active' })
     showToast('Reverted to active')
+  }
+
+  const clearProgress = async () => {
+    if (!setId || !set) return
+    await api.setProgress(setId, 'NotStarted')
+    setSet({ ...set, progressStatus: 'NotStarted' })
+    showToast('Cleared progress')
   }
 
 
@@ -245,7 +254,9 @@ export default function WordSetView() {
             </HoldToConfirm>
           )}
           {set.progressStatus === 'Active' && (
-            <span className="meta-pill meta-pill-active">◐ In progress</span>
+            <HoldToConfirm onConfirm={clearProgress} hint="Hold to clear">
+              <span className="chip-label">◐ In progress</span>
+            </HoldToConfirm>
           )}
         </div>
       </header>
@@ -272,12 +283,15 @@ export default function WordSetView() {
       ) : (
         <ul className="word-list">
           {words.map(w => (
-            <li key={w.id} className="word-card">
+            <li key={w.id} className="word-card word-card-clickable" onClick={() => speakGerman(w.front)}>
               <div className="word-card-body">
                 <div className="word-card-front">{w.front}</div>
                 <div className="word-card-back">{w.back}</div>
                 {w.context && <div className="word-card-context">{w.context}</div>}
               </div>
+              <button className="word-speaker" onClick={(e) => { e.stopPropagation(); speakGerman(w.front) }} aria-label="Speak">
+                <SpeakerIcon />
+              </button>
             </li>
           ))}
         </ul>

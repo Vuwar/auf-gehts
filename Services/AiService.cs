@@ -51,6 +51,35 @@ public class AiService(
         return new GeneratedTextResponse(text, remaining);
     }
 
+    public async Task<string?> TranslateAsync(string text, Guid userId)
+    {
+        var user = await userService.GetAsync(userId);
+        if (user is null) return null;
+        var apiKey = user.AnthropicApiKey ?? config["Anthropic:ApiKey"];
+        if (string.IsNullOrEmpty(apiKey)) throw new InvalidOperationException("No API key configured");
+
+        var useFreeQuota = string.IsNullOrEmpty(user.AnthropicApiKey);
+        if (useFreeQuota)
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var usage = await db.AiUsage.FirstOrDefaultAsync(u => u.UserId == userId && u.Date == today);
+            if (usage is null)
+            {
+                usage = new AiUsage { UserId = userId, Date = today, RequestCount = 0 };
+                db.AiUsage.Add(usage);
+            }
+            if (usage.RequestCount >= DailyFreeLimit)
+            {
+                throw new InvalidOperationException($"Daily limit reached ({DailyFreeLimit}). Add your own Anthropic API key for unlimited usage.");
+            }
+            usage.RequestCount++;
+            await db.SaveChangesAsync();
+        }
+
+        var prompt = $"Translate the following German text to English. Return ONLY the English translation, no commentary:\n\n{text}";
+        return await CallClaudeAsync(apiKey, prompt);
+    }
+
     public async Task<int> GetRemainingTodayAsync(Guid userId)
     {
         var user = await userService.GetAsync(userId);
