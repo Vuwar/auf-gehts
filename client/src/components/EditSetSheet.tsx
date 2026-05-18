@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { api, parseBulkText, type Week, type Word, type WordSet } from '../api'
+import { api, type Week, type Word, type WordSet } from '../api'
 import { useAuth } from '../auth'
+import AddWordsPanel from './AddWordsPanel'
 
 interface Props {
   set: WordSet
@@ -17,13 +18,10 @@ export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWord
   const [weeks, setWeeks] = useState<Week[]>([])
   const [name, setName] = useState(set.name)
   const [savingName, setSavingName] = useState(false)
+  const [description, setDescription] = useState(set.description ?? '')
+  const [savingDescription, setSavingDescription] = useState(false)
   const [isPublic, setIsPublic] = useState(set.isPublic)
   const [togglingPublic, setTogglingPublic] = useState(false)
-  const [newFront, setNewFront] = useState('')
-  const [newBack, setNewBack] = useState('')
-  const [showBulk, setShowBulk] = useState(false)
-  const [bulkText, setBulkText] = useState('')
-
   const [addOpen, setAddOpen] = useState(false)
   const [wordsOpen, setWordsOpen] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -65,6 +63,18 @@ export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWord
     }
   }
 
+  const saveDescription = async () => {
+    const next = description.trim()
+    if (next === (set.description ?? '')) return
+    setSavingDescription(true)
+    try {
+      const updated = await api.updateSet(set.id, { description: next })
+      onSetUpdated(updated)
+    } finally {
+      setSavingDescription(false)
+    }
+  }
+
   const togglePublic = async () => {
     setTogglingPublic(true)
     try {
@@ -77,21 +87,15 @@ export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWord
     }
   }
 
-  const addWord = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newFront.trim() || !newBack.trim()) return
-    const w = await api.addWord(set.id, newFront.trim(), newBack.trim())
+  const addWord = async (front: string, back: string) => {
+    const w = await api.addWord(set.id, front, back)
     onWordsChanged([...words, w])
-    setNewFront(''); setNewBack('')
   }
 
-  const bulkAdd = async () => {
-    const parsed = parseBulkText(bulkText).filter(c => c.front && c.back)
-    if (parsed.length === 0) { alert('Nothing valid'); return }
-    await api.bulkAddWords(set.id, parsed)
+  const bulkAdd = async (items: { front: string; back: string }[]) => {
+    await api.bulkAddWords(set.id, items)
     const fresh = await api.listWords(set.id)
     onWordsChanged(fresh)
-    setBulkText(''); setShowBulk(false)
   }
 
   const deleteWord = async (id: string) => {
@@ -119,6 +123,26 @@ export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWord
               <input type="text" value={name} onChange={e => setName(e.target.value)} style={{ flex: 1 }} />
               <button onClick={saveName} disabled={savingName || name.trim() === set.name || !name.trim()} className="deck-btn primary">
                 {savingName ? '...' : 'Save'}
+              </button>
+            </div>
+          </div>
+
+          <div className="form-row">
+            <span className="card-label">Description</span>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type="text"
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Add a short description"
+                style={{ flex: 1 }}
+              />
+              <button
+                onClick={saveDescription}
+                disabled={savingDescription || description.trim() === (set.description ?? '')}
+                className="deck-btn primary"
+              >
+                {savingDescription ? '...' : 'Save'}
               </button>
             </div>
           </div>
@@ -164,25 +188,7 @@ export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWord
             <ChevronIcon open={addOpen} />
           </button>
           {addOpen && (
-            <div className="collapse-content">
-              <div className="tab-toggle">
-                <button onClick={() => setShowBulk(false)} className={`tab-toggle-btn ${!showBulk ? 'active' : ''}`}>Single</button>
-                <button onClick={() => setShowBulk(true)} className={`tab-toggle-btn ${showBulk ? 'active' : ''}`}>Multiple</button>
-              </div>
-              {!showBulk ? (
-                <form onSubmit={addWord} className="form-row">
-                  <input type="text" placeholder="German" value={newFront} onChange={e => setNewFront(e.target.value)} />
-                  <input type="text" placeholder="English" value={newBack} onChange={e => setNewBack(e.target.value)} />
-                  <button type="submit" className="deck-btn primary">Add word</button>
-                </form>
-              ) : (
-                <div className="form-row">
-                  <p className="hint">One per line. Format: German - English</p>
-                  <textarea rows={6} value={bulkText} onChange={e => setBulkText(e.target.value)} placeholder="der Hund - the dog" />
-                  <button onClick={bulkAdd} className="deck-btn primary">Save all</button>
-                </div>
-              )}
-            </div>
+            <AddWordsPanel onAddSingle={addWord} onBulkAdd={bulkAdd} />
           )}
 
           <button onClick={() => setWordsOpen(!wordsOpen)} className="collapse-toggle sticky-toggle">

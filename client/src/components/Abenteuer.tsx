@@ -97,6 +97,17 @@ export default function Abenteuer() {
           </div>
         )}
 
+        {detail.sets.length > 0 && (
+          <button
+            onClick={() => nav(`/sets/weekly:${detail.number}`)}
+            className="deck-btn primary"
+            style={{ width: '100%', marginTop: '8px', justifyContent: 'space-between', display: 'flex' }}
+          >
+            <span>View all weekly words</span>
+            <span aria-hidden>→</span>
+          </button>
+        )}
+
         <h2 className="section-title">Reading texts</h2>
         {detail.readingTexts.length === 0 && <p className="empty-state">No texts assigned to this week.</p>}
         <ul className="deck-list">

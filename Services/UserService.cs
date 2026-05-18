@@ -18,7 +18,10 @@ public class UserService(IUserRepository repo)
             }
             catch (DbUpdateException)
             {
-                // Race condition: another concurrent request created the user. Fetch again.
+                // Race condition: another concurrent request created the user. Detach the
+                // failed Added entity so it doesn't get re-batched into a later SaveChanges
+                // (which would re-trigger 23505 and roll back unrelated work), then re-fetch.
+                repo.DetachAdded(id);
                 user = await repo.GetByIdAsync(id);
                 if (user is null) throw;
             }

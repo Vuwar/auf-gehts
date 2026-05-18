@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, type Week } from '../api'
 import { useAuth } from '../auth'
+import AddWordsPanel from './AddWordsPanel'
 
 interface Props {
   onClose: () => void
@@ -19,6 +20,8 @@ export default function CreateSetSheet({ onClose, onCreated }: Props) {
   const [isOfficial, setIsOfficial] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [addOpen, setAddOpen] = useState(false)
+  const [wordBuffer, setWordBuffer] = useState<{ front: string; back: string }[]>([])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -47,6 +50,13 @@ export default function CreateSetSheet({ onClose, onCreated }: Props) {
         isOfficial: isAdmin && isOfficial,
         weekId: isAdmin ? (weekId || undefined) : undefined,
       })
+      if (wordBuffer.length > 0) {
+        try {
+          await api.bulkAddWords(set.id, wordBuffer)
+        } catch (err) {
+          console.error('Failed to add queued words', err)
+        }
+      }
       onCreated(set.slug)
       onClose()
     } catch (e: any) {
@@ -97,10 +107,24 @@ export default function CreateSetSheet({ onClose, onCreated }: Props) {
               </>
             )}
 
+            <button type="button" onClick={() => setAddOpen(!addOpen)} className="collapse-toggle">
+              <span>Add words {wordBuffer.length > 0 ? `(${wordBuffer.length})` : ''}</span>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: addOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+            {addOpen && (
+              <AddWordsPanel
+                onAddSingle={(front, back) => { setWordBuffer(prev => [...prev, { front, back }]) }}
+                onBulkAdd={(items) => { setWordBuffer(prev => [...prev, ...items]) }}
+                bufferCount={wordBuffer.length}
+              />
+            )}
+
             {error && <p style={{ color: 'var(--danger)', fontSize: '13px', margin: 0 }}>{error}</p>}
 
             <button type="submit" disabled={saving || !name.trim()} className="deck-btn primary">
-              {saving ? 'Creating...' : 'Create'}
+              {saving ? 'Creating...' : (wordBuffer.length > 0 ? `Create + add ${wordBuffer.length} words` : 'Create')}
             </button>
           </form>
         </div>

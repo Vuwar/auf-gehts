@@ -26,7 +26,7 @@ public class WordSetService(
 
         var ownedRaw = await db.WordSets
             .Include(s => s.Week)
-            .Where(s => s.CreatedByUserId == userId)
+            .Where(s => s.CreatedByUserId == userId && !s.IsOfficial)
             .OrderByDescending(s => s.CreatedAt)
             .Select(s => new { Set = s, WordCount = s.Words.Count })
             .ToListAsync();

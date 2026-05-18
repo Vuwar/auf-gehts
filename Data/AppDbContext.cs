@@ -10,6 +10,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<WordSet> WordSets => Set<WordSet>();
     public DbSet<Word> Words => Set<Word>();
     public DbSet<UserSetProgress> UserSetProgress => Set<UserSetProgress>();
+    public DbSet<UserWeekCombinedProgress> UserWeekCombinedProgress => Set<UserWeekCombinedProgress>();
     public DbSet<WordCache> WordCache => Set<WordCache>();
     public DbSet<AiUsage> AiUsage => Set<AiUsage>();
     public DbSet<ReadingText> ReadingTexts => Set<ReadingText>();
@@ -86,6 +87,23 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasOne(e => e.WordSet)
                   .WithMany()
                   .HasForeignKey(e => e.WordSetId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserWeekCombinedProgress>(entity =>
+        {
+            entity.ToTable("user_week_combined_progress");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.LastReviewedAt).HasDefaultValueSql("now()");
+            entity.HasIndex(e => new { e.UserId, e.WeekId }).IsUnique();
+            entity.HasOne(e => e.Week)
+                  .WithMany()
+                  .HasForeignKey(e => e.WeekId)
                   .OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<User>()
                   .WithMany()

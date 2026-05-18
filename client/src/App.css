@@ -396,6 +396,49 @@
   height: 280px;
   perspective: 1200px;
   cursor: pointer;
+  position: relative;
+}
+
+.flashcard-speaker {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text-h);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.flashcard-speaker:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.flashcard-speaker.speaking {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.flashcard-tts-error {
+  position: absolute;
+  top: 52px;
+  right: 10px;
+  z-index: 2;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text-h);
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 6px;
+  pointer-events: none;
 }
 
 .flashcard {
@@ -564,6 +607,76 @@
 .deck-item-count {
   opacity: 0.6;
   font-size: 0.9em;
+}
+
+.deck-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: var(--text-h);
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.deck-item--passage .deck-item-icon {
+  color: var(--text-h);
+  opacity: 0.55;
+}
+
+.deck-item--wordset.deck-item--completed {
+  border-left: 3px solid var(--accent);
+}
+
+.deck-item--wordset.deck-item--completed .deck-item-icon {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.deck-item--wordset.deck-item--completed .deck-item-main {
+  opacity: 0.8;
+}
+
+.starter-level--accent {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+  border-color: var(--accent-border, var(--accent));
+}
+
+.offline-pill {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text-h);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.offline-pill .offline-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger, #e85a5a);
+}
+
+.offline-pill.syncing .offline-dot {
+  background: var(--accent);
+  animation: pulse-dot 1s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
 }
 
 /* Data table — desktop, becomes cards on mobile */

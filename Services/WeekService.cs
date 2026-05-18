@@ -104,4 +104,95 @@ public class WeekService(
         await weeks.DeleteAsync(week);
         return true;
     }
+
+    // Synthetic id derived deterministically from a week id so the client has a stable identifier.
+    private static Guid SyntheticSetId(Guid weekId)
+    {
+        var bytes = weekId.ToByteArray();
+        // Flip a couple of bytes so it never collides with a real WordSet id.
+        bytes[6] = (byte)(bytes[6] ^ 0xCB);
+        bytes[7] = (byte)(bytes[7] ^ 0xAF);
+        return new Guid(bytes);
+    }
+
+    public async Task<WordSetResponse?> GetCombinedSetAsync(Guid weekId, Guid userId)
+    {
+        var week = await weeks.GetByIdAsync(weekId);
+        if (week is null) return null;
+
+        var wordCount = await db.WordSets
+            .Where(s => s.WeekId == weekId && s.IsOfficial && s.IsPublic)
+            .SelectMany(s => s.Words.Select(w => new { Front = w.Front.ToLower(), Back = w.Back.ToLower() }))
+            .Distinct()
+            .CountAsync();
+
+        var prog = await db.UserWeekCombinedProgress
+            .FirstOrDefaultAsync(p => p.UserId == userId && p.WeekId == weekId);
+        var status = prog?.Status ?? ProgressStatus.NotStarted;
+
+        return new WordSetResponse(
+            SyntheticSetId(weekId),
+            $"weekly:{week.Number}",
+            weekId,
+            week.Number,
+            $"Woche {week.Number} — All Words",
+            week.Description,
+            null,
+            false,
+            true,
+            false,
+            false,
+            wordCount,
+            status.ToString(),
+            week.CreatedAt
+        );
+    }
+
+    public async Task<List<WordResponse>> GetCombinedWordsAsync(Guid weekId)
+    {
+        // Union of words across all official sets in the week, deduped case-insensitively by (front, back).
+        var rows = await db.WordSets
+            .Where(s => s.WeekId == weekId && s.IsOfficial && s.IsPublic)
+            .SelectMany(s => s.Words)
+            .OrderBy(w => w.DisplayOrder)
+            .ThenBy(w => w.CreatedAt)
+            .Select(w => new WordResponse(w.Id, w.WordSetId, w.Front, w.Back, w.Context, w.DisplayOrder, w.CreatedAt))
+            .ToListAsync();
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var deduped = new List<WordResponse>(rows.Count);
+        foreach (var r in rows)
+        {
+            var key = r.Front + "" + r.Back;
+            if (seen.Add(key)) deduped.Add(r);
+        }
+        return deduped;
+    }
+
+    public async Task SetCombinedProgressAsync(Guid weekId, Guid userId, ProgressStatus status)
+    {
+        var existing = await db.UserWeekCombinedProgress
+            .FirstOrDefaultAsync(p => p.UserId == userId && p.WeekId == weekId);
+        var now = DateTime.UtcNow;
+        if (existing is null)
+        {
+            db.UserWeekCombinedProgress.Add(new UserWeekCombinedProgress
+            {
+                UserId = userId,
+                WeekId = weekId,
+                Status = status,
+                StartedAt = status == ProgressStatus.Active ? now : null,
+                CompletedAt = status == ProgressStatus.Completed ? now : null,
+                LastReviewedAt = now,
+            });
+        }
+        else
+        {
+            existing.Status = status;
+            if (status == ProgressStatus.Active && existing.StartedAt is null) existing.StartedAt = now;
+            if (status == ProgressStatus.Completed) existing.CompletedAt = now;
+            existing.LastReviewedAt = now;
+        }
+        await db.SaveChangesAsync();
+    }
 }

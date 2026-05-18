@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { enqueue, flushQueue, isOfflineError } from './offlineQueue'
 
 const API_BASE = `${(import.meta.env.VITE_API_URL as string) ?? ''}/api`
 
@@ -287,6 +288,47 @@ if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', flushSamples)
 }
 
+// Generic authed fetch used by both `request` and the offline-queue flusher.
+// Returns the raw Response so the queue can inspect statuses without parsing JSON.
+async function authedFetch(url: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const { data: sessionData } = await supabase.auth.getSession()
+  const token = sessionData.session?.access_token
+  return fetch(url, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...init?.headers,
+    },
+  })
+}
+
+// Wraps a mutation: if offline (or network error), queue it and resolve optimistically.
+// On reconnect, the queue flushes in FIFO order with last-write-wins per coalesceKey.
+async function queueOnOffline<T>(url: string, method: string, body: unknown, coalesceKey?: string): Promise<T> {
+  if (!navigator.onLine) {
+    enqueue({ url, method, body, coalesceKey })
+    return undefined as T
+  }
+  try {
+    return await request<T>(url, { method, body: JSON.stringify(body) })
+  } catch (e) {
+    if (isOfflineError(e)) {
+      enqueue({ url, method, body, coalesceKey })
+      // Best-effort attempt to flush in case we just came back online.
+      void flushQueue(authedFetch)
+      return undefined as T
+    }
+    throw e
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => { flushQueue(authedFetch) })
+  // Also try once on load (covers tab-open-with-pending-queue).
+  setTimeout(() => { if (navigator.onLine) flushQueue(authedFetch) }, 1500)
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   inflight++
   notifyLoading()
@@ -395,19 +437,35 @@ export const api = {
     }),
 
   setProgress: (idOrSlug: string, status: 'NotStarted' | 'Active' | 'Completed') =>
-    request<void>(`${API_BASE}/sets/${idOrSlug}/progress`, {
-      method: 'PUT',
-      body: JSON.stringify({ status }),
-    }),
+    queueOnOffline<void>(
+      `${API_BASE}/sets/${idOrSlug}/progress`,
+      'PUT',
+      { status },
+      `progress:${idOrSlug}`,
+    ),
   setFavorite: (idOrSlug: string, isFavorite: boolean) =>
-    request<void>(`${API_BASE}/sets/${idOrSlug}/favorite`, {
-      method: 'PUT',
-      body: JSON.stringify({ isFavorite }),
-    }),
+    queueOnOffline<void>(
+      `${API_BASE}/sets/${idOrSlug}/favorite`,
+      'PUT',
+      { isFavorite },
+      `favorite:${idOrSlug}`,
+    ),
   searchSets: (q?: string) =>
     request<WordSet[]>(`${API_BASE}/sets/search${q ? `?q=${encodeURIComponent(q)}` : ''}`),
 
   listWords: (idOrSlug: string) => request<Word[]>(`${API_BASE}/sets/${idOrSlug}/words`),
+
+  getCombinedWeekSet: (idOrNumber: string | number) =>
+    request<WordSet>(`${API_BASE}/weeks/${idOrNumber}/combined-set`),
+  listCombinedWeekWords: (idOrNumber: string | number) =>
+    request<Word[]>(`${API_BASE}/weeks/${idOrNumber}/combined-set/words`),
+  setCombinedWeekProgress: (idOrNumber: string | number, status: 'NotStarted' | 'Active' | 'Completed') =>
+    queueOnOffline<void>(
+      `${API_BASE}/weeks/${idOrNumber}/combined-set/progress`,
+      'PUT',
+      { status },
+      `combined-progress:${idOrNumber}`,
+    ),
   addWord: (idOrSlug: string, front: string, back: string, context?: string) =>
     request<Word>(`${API_BASE}/sets/${idOrSlug}/words`, {
       method: 'POST',

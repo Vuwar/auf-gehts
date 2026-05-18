@@ -68,9 +68,12 @@ export default function Reader() {
       ) : (
         <ul className="deck-list">
           {filtered.map(t => (
-            <li key={t.id} className="deck-item">
+            <li key={t.id} className="deck-item deck-item--passage">
               <button onClick={() => nav(`/reader/${t.id}`)} className="deck-item-main">
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span className="deck-item-icon" aria-hidden>
+                    <PassageIcon />
+                  </span>
                   <strong>{t.title}</strong>
                   {t.level && <span className="starter-level">{t.level}</span>}
                   {t.weekNumber !== null && <span className="deck-item-count">· Woche {t.weekNumber}</span>}
@@ -100,5 +103,17 @@ export default function Reader() {
         />
       )}
     </div>
+  )
+}
+
+function PassageIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="8" y1="13" x2="16" y2="13" />
+      <line x1="8" y1="17" x2="16" y2="17" />
+      <line x1="8" y1="9" x2="10" y2="9" />
+    </svg>
   )
 }

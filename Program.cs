@@ -73,7 +73,15 @@ builder.Services.AddHostedService<EventLogWorker>();
 
 builder.Services.AddDbContext<AppDbContext>((sp, options) =>
 {
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"));
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        // Auto-retry transient Postgres / pgbouncer hiccups (e.g. "Exception while reading
+        // from stream" when the pooler drops an idle connection). Safe because no code path
+        // uses explicit BeginTransaction; if you add one, wrap it in CreateExecutionStrategy.
+        npg => npg.EnableRetryOnFailure(
+            maxRetryCount: 3,
+            maxRetryDelay: TimeSpan.FromSeconds(2),
+            errorCodesToAdd: null));
     options.AddInterceptors(sp.GetRequiredService<SlowQueryInterceptor>());
 });
 

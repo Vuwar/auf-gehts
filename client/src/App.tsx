@@ -11,6 +11,7 @@ import Abenteuer from './components/Abenteuer'
 import UserMenu from './components/UserMenu'
 import Alphabet from './components/Alphabet'
 import LoadingBar from './components/LoadingBar'
+import OfflineIndicator from './components/OfflineIndicator'
 import { AuthProvider, useAuth } from './auth'
 import './App.css'
 
@@ -74,6 +75,7 @@ function ProtectedLayout() {
   return (
     <div className="app-shell">
       <LoadingBar />
+      <OfflineIndicator />
       <TopBar />
       <main className="app-content">
         <Outlet />

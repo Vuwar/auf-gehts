@@ -26,4 +26,11 @@ public class UserRepository(AppDbContext db) : IUserRepository
         db.Users.Remove(user);
         return db.SaveChangesAsync();
     }
+
+    public void DetachAdded(Guid id)
+    {
+        var added = db.ChangeTracker.Entries<User>()
+            .FirstOrDefault(e => e.State == EntityState.Added && e.Entity.Id == id);
+        if (added is not null) added.State = EntityState.Detached;
+    }
 }

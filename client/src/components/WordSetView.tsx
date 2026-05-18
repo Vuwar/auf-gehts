@@ -14,6 +14,12 @@ type View = 'list' | 'study'
 export default function WordSetView() {
   const { setSlug } = useParams<{ setSlug: string }>()
   const setId = setSlug
+  const combinedWeekNumber = (() => {
+    if (!setSlug) return null
+    const m = setSlug.match(/^weekly:(\d+)$/)
+    return m ? Number(m[1]) : null
+  })()
+  const isCombined = combinedWeekNumber !== null
   const nav = useNavigate()
   const { profile } = useAuth()
   const canEdit = profile?.role !== 'ViewOnly'
@@ -33,11 +39,25 @@ export default function WordSetView() {
 
   useEffect(() => {
     if (!setId) return
-    Promise.all([api.getSet(setId), api.listWords(setId)])
+    const load = isCombined
+      ? Promise.all([
+          api.getCombinedWeekSet(combinedWeekNumber!),
+          api.listCombinedWeekWords(combinedWeekNumber!),
+        ])
+      : Promise.all([api.getSet(setId), api.listWords(setId)])
+    load
       .then(([s, w]) => { setSet(s); setWords(w) })
       .catch(e => setError(e))
       .finally(() => setLoading(false))
-  }, [setId])
+  }, [setId, isCombined, combinedWeekNumber])
+
+  const setProgressApi = async (status: 'NotStarted' | 'Active' | 'Completed') => {
+    if (isCombined) {
+      await api.setCombinedWeekProgress(combinedWeekNumber!, status)
+    } else if (setId) {
+      await api.setProgress(setId, status)
+    }
+  }
 
   const startStudy = async () => {
     if (!setId || !set) return
@@ -47,7 +67,7 @@ export default function WordSetView() {
     setMissedIds(new Set())
     setView('study')
     if (set.progressStatus === 'NotStarted') {
-      await api.setProgress(setId, 'Active')
+      await setProgressApi('Active')
       setSet({ ...set, progressStatus: 'Active' })
     }
   }
@@ -82,7 +102,7 @@ export default function WordSetView() {
     // Auto-complete if user studied full set + missed none
     const studiedFullSet = studyQueue.length === words.length
     if (studiedFullSet && missed.size === 0 && learned.size === words.length && setId && set) {
-      await api.setProgress(setId, 'Completed')
+      await setProgressApi('Completed')
       setSet({ ...set, progressStatus: 'Completed' })
     }
     setIndex(studyQueue.length) // summary
@@ -106,14 +126,14 @@ export default function WordSetView() {
 
   const markActive = async () => {
     if (!setId || !set) return
-    await api.setProgress(setId, 'Active')
+    await setProgressApi('Active')
     setSet({ ...set, progressStatus: 'Active' })
     showToast('Reverted to active')
   }
 
   const clearProgress = async () => {
     if (!setId || !set) return
-    await api.setProgress(setId, 'NotStarted')
+    await setProgressApi('NotStarted')
     setSet({ ...set, progressStatus: 'NotStarted' })
     showToast('Cleared progress')
   }
@@ -217,16 +237,18 @@ export default function WordSetView() {
             {set.description && <p className="set-subtitle">{set.description}</p>}
           </div>
           <div className="set-header-actions">
-            <button
-              onClick={toggleBookmark}
-              className={`bookmark-btn ${set.isFavorite ? 'active' : ''}`}
-              aria-label={set.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-            >
-              <svg viewBox="0 0 24 24" width="22" height="22" fill={set.isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-              </svg>
-            </button>
-            {(set.isOwner || isAdmin) && canEdit && (
+            {!isCombined && (
+              <button
+                onClick={toggleBookmark}
+                className={`bookmark-btn ${set.isFavorite ? 'active' : ''}`}
+                aria-label={set.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              >
+                <svg viewBox="0 0 24 24" width="22" height="22" fill={set.isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                </svg>
+              </button>
+            )}
+            {!isCombined && (set.isOwner || isAdmin) && canEdit && (
               <button
                 onClick={() => setEditOpen(true)}
                 className="bookmark-btn"

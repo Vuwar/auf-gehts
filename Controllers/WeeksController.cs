@@ -60,4 +60,48 @@ public class WeeksController(WeekService service, IWeekRepository repo) : BaseCo
         var ok = await service.DeleteAsync(id);
         return ok ? NoContent() : Forbid();
     }
+
+    [HttpGet("{idOrNumber}/combined-set")]
+    public async Task<ActionResult<WordSetResponse>> CombinedSet(string idOrNumber)
+    {
+        var userId = GetUserId();
+        if (userId is null) return Unauthorized();
+        var weekId = await ResolveWeekIdAsync(idOrNumber);
+        if (weekId is null) return NotFound();
+        var resp = await service.GetCombinedSetAsync(weekId.Value, userId.Value);
+        return resp is null ? NotFound() : Ok(resp);
+    }
+
+    [HttpGet("{idOrNumber}/combined-set/words")]
+    public async Task<ActionResult<List<WordResponse>>> CombinedWords(string idOrNumber)
+    {
+        var userId = GetUserId();
+        if (userId is null) return Unauthorized();
+        var weekId = await ResolveWeekIdAsync(idOrNumber);
+        if (weekId is null) return NotFound();
+        return Ok(await service.GetCombinedWordsAsync(weekId.Value));
+    }
+
+    [HttpPut("{idOrNumber}/combined-set/progress")]
+    public async Task<IActionResult> CombinedProgress(string idOrNumber, [FromBody] DTOs.Requests.UpdateProgressRequest req)
+    {
+        var userId = GetUserId();
+        if (userId is null) return Unauthorized();
+        var weekId = await ResolveWeekIdAsync(idOrNumber);
+        if (weekId is null) return NotFound();
+        if (!Enum.TryParse<Models.ProgressStatus>(req.Status, out var status)) return BadRequest(new { error = "Invalid status" });
+        await service.SetCombinedProgressAsync(weekId.Value, userId.Value, status);
+        return NoContent();
+    }
+
+    private async Task<Guid?> ResolveWeekIdAsync(string idOrNumber)
+    {
+        if (Guid.TryParse(idOrNumber, out var id)) return id;
+        if (int.TryParse(idOrNumber, out var num))
+        {
+            var w = await repo.GetByNumberAsync(num);
+            return w?.Id;
+        }
+        return null;
+    }
 }

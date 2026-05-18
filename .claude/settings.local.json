@@ -28,7 +28,15 @@
       "Bash(cd \"C:/Users/user/auf-gehts/client/public/audio/letters\" && rm -f *.ogg *.mp3 && bash _download.sh)",
       "Bash(dir C:\\\\Users\\\\user\\\\auf-gehts /B)",
       "PowerShell(dotnet build api.csproj -nologo -v quiet 2>&1)",
-      "Bash(echo \"EXIT=$?\")"
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(npm run *)",
+      "Bash(npm install *)",
+      "Bash(dotnet build *)",
+      "Bash(dotnet user-secrets *)",
+      "Bash(env)",
+      "Bash(cmd.exe //c \"dir /A appsettings* 2>nul\")",
+      "Bash(cmd.exe //c \"set\")",
+      "Bash(dotnet ef *)"
     ]
   }
 }

@@ -62,8 +62,18 @@ if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
   pickGermanVoice()
 }
 
-export function speakGerman(text: string) {
-  if (!('speechSynthesis' in window)) return
+export function ttsAvailable(): boolean {
+  return typeof window !== 'undefined' && 'speechSynthesis' in window
+}
+
+export interface SpeakOptions {
+  onStart?: () => void
+  onEnd?: () => void
+  onError?: () => void
+}
+
+export function speakGerman(text: string, opts?: SpeakOptions) {
+  if (!ttsAvailable()) { opts?.onError?.(); return }
   window.speechSynthesis.cancel()
   const u = new SpeechSynthesisUtterance(text)
   u.lang = 'de-DE'
@@ -71,5 +81,12 @@ export function speakGerman(text: string) {
   u.pitch = 1.0
   const v = pickGermanVoice()
   if (v) u.voice = v
+  if (opts?.onStart) u.onstart = () => opts.onStart!()
+  if (opts?.onEnd) u.onend = () => opts.onEnd!()
+  u.onerror = () => opts?.onError?.()
   window.speechSynthesis.speak(u)
+}
+
+export function stopSpeaking() {
+  if (ttsAvailable()) window.speechSynthesis.cancel()
 }

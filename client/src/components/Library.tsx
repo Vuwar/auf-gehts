@@ -42,7 +42,7 @@ export default function Library() {
         )}
       </div>
 
-      <Section title="Favorites" sets={data.favorites} emptyMsg="No favorites yet. Tap the heart on any set." onClick={s => nav(`/sets/${s.slug}`)} />
+      <Section title="Favorites" sets={data.favorites} emptyMsg="No favorites yet. Tap the heart on any set." onClick={s => nav(`/sets/${s.slug}`)} showMineChip />
       <Section title="My sets" sets={data.mine} emptyMsg="You haven't created any sets yet." onClick={s => nav(`/sets/${s.slug}`)} />
       <Section title="Completed" sets={data.completed} emptyMsg="No completed sets yet." onClick={s => nav(`/sets/${s.slug}`)} collapsible open={completedOpen} onToggle={() => setCompletedOpen(!completedOpen)} />
       <Section title="Browse sets" sets={data.browse} emptyMsg="No other public sets right now." onClick={s => nav(`/sets/${s.slug}`)} collapsible open={browseOpen} onToggle={() => setBrowseOpen(!browseOpen)} />
@@ -65,9 +65,10 @@ interface SectionProps {
   collapsible?: boolean
   open?: boolean
   onToggle?: () => void
+  showMineChip?: boolean
 }
 
-function Section({ title, sets, emptyMsg, onClick, collapsible, open, onToggle }: SectionProps) {
+function Section({ title, sets, emptyMsg, onClick, collapsible, open, onToggle, showMineChip }: SectionProps) {
   const header = collapsible ? (
     <button onClick={onToggle} className="section-header section-header-toggle">
       <span className="section-title">{title} <span className="hint">({sets.length})</span></span>
@@ -87,7 +88,7 @@ function Section({ title, sets, emptyMsg, onClick, collapsible, open, onToggle }
     <p className="hint">{emptyMsg}</p>
   ) : (
     <ul className="deck-list">
-      {sets.map(s => <SetRow key={s.id} set={s} onClick={onClick} />)}
+      {sets.map(s => <SetRow key={s.id} set={s} onClick={onClick} showMineChip={showMineChip} />)}
     </ul>
   )
 
@@ -99,20 +100,35 @@ function Section({ title, sets, emptyMsg, onClick, collapsible, open, onToggle }
   )
 }
 
-function SetRow({ set, onClick }: { set: WordSet; onClick: (s: WordSet) => void }) {
+function SetRow({ set, onClick, showMineChip }: { set: WordSet; onClick: (s: WordSet) => void; showMineChip?: boolean }) {
+  const isCompleted = set.progressStatus === 'Completed'
+  const rowClass = `deck-item deck-item--wordset${isCompleted ? ' deck-item--completed' : ''}`
   return (
-    <li className="deck-item">
+    <li className={rowClass}>
       <button onClick={() => onClick(set)} className="deck-item-main">
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="deck-item-icon" aria-hidden>
+            <WordSetIcon />
+          </span>
           <span>{set.name}</span>
+          {isCompleted && <span className="starter-level starter-level--accent" title="Completed">✓</span>}
           {set.isFavorite && <span className="starter-level" title="Favorited">♥</span>}
-          {set.isOwner && <span className="starter-level" title="Your set">Mine</span>}
+          {showMineChip && set.isOwner && <span className="starter-level" title="Your set">Mine</span>}
           {set.weekNumber && <span className="starter-level">W{set.weekNumber}</span>}
           {set.level && <span className="starter-level">{set.level}</span>}
-          {!set.isPublic && <span className="starter-level">private</span>}
+          {!set.isPublic && !set.isOfficial && <span className="starter-level">private</span>}
           <span className="deck-item-count">· {set.wordCount} words</span>
         </div>
       </button>
     </li>
+  )
+}
+
+function WordSetIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+    </svg>
   )
 }
