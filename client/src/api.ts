@@ -536,10 +536,10 @@ export const api = {
       }),
     }),
   adminListUsers: () => request<UserProfile[]>(`${API_BASE}/admin/users`),
-  adminLogsStats: (hours: number = 1) =>
-    request<LogsStats>(`${API_BASE}/admin/logs/stats?hours=${hours}`),
-  adminLogsDiagnose: (hours: number = 1) =>
-    request<DiagnosticReport>(`${API_BASE}/admin/logs/diagnose?hours=${hours}`),
+  adminLogsStats: (minutes: number = 60) =>
+    request<LogsStats>(`${API_BASE}/admin/logs/stats?minutes=${minutes}`),
+  adminLogsDiagnose: (minutes: number = 60) =>
+    request<DiagnosticReport>(`${API_BASE}/admin/logs/diagnose?minutes=${minutes}`),
   adminQueryLogs: (params: LogQueryParams) => {
     const q = new URLSearchParams()
     if (params.level) q.set('level', params.level)

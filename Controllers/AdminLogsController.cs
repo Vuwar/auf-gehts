@@ -5,13 +5,15 @@ using Api.Services;
 using Api.Services.Logging;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Api.Controllers;
 
 [Route("api/admin/logs")]
-public class AdminLogsController(AppDbContext db, CurrentUserAccessor currentUser, ConcurrencyTracker concurrency, DiagnosticAnalyzer analyzer) : BaseController
+public class AdminLogsController(AppDbContext db, CurrentUserAccessor currentUser, ConcurrencyTracker concurrency, DiagnosticAnalyzer analyzer, IMemoryCache cache) : BaseController
 {
     private const int MaxPageSize = 200;
+    private static readonly TimeSpan DiagnoseTtl = TimeSpan.FromSeconds(10);
 
     [HttpGet]
     public async Task<ActionResult<object>> Query(
@@ -54,12 +56,14 @@ public class AdminLogsController(AppDbContext db, CurrentUserAccessor currentUse
     }
 
     [HttpGet("stats")]
-    public async Task<ActionResult<object>> Stats([FromQuery] int hours = 1)
+    public async Task<ActionResult<object>> Stats([FromQuery] int hours = 1, [FromQuery] int? minutes = null)
     {
         var current = await currentUser.GetAsync();
         if (current?.Role != UserRole.Admin) return Forbid();
-        hours = Math.Clamp(hours, 1, 168);
-        var since = DateTime.UtcNow.AddHours(-hours);
+        // `minutes` takes precedence when supplied so callers can pick arbitrary windows
+        // (e.g. 5min, 43min); `hours` is kept for backward compatibility.
+        var windowMinutes = Math.Clamp(minutes ?? hours * 60, 1, 168 * 60);
+        var since = DateTime.UtcNow.AddMinutes(-windowMinutes);
 
         var rows = await db.EventLogs.AsNoTracking()
             .Where(e => e.Timestamp >= since)
@@ -105,11 +109,23 @@ public class AdminLogsController(AppDbContext db, CurrentUserAccessor currentUse
     }
 
     [HttpGet("diagnose")]
-    public async Task<ActionResult<DiagnosticReport>> Diagnose([FromQuery] int hours = 1)
+    public async Task<ActionResult<DiagnosticReport>> Diagnose([FromQuery] int hours = 1, [FromQuery] int? minutes = null)
     {
         var current = await currentUser.GetAsync();
         if (current?.Role != UserRole.Admin) return Forbid();
-        return Ok(await analyzer.RunAsync(hours));
+        var windowMinutes = Math.Clamp(minutes ?? hours * 60, 1, 168 * 60);
+
+        // 10s in-memory cache coalesces the admin page's auto-refresh + multiple admin tabs
+        // into a single underlying compute. GetOrCreateAsync's Lazy semantics also serialize
+        // concurrent misses for the same key, so we never run the 7-query analysis twice
+        // simultaneously for the same window.
+        var key = $"diagnose:{windowMinutes}";
+        var report = await cache.GetOrCreateAsync(key, async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = DiagnoseTtl;
+            return await analyzer.RunAsync(windowMinutes);
+        });
+        return Ok(report);
     }
 
     public class SlowEndpointRow

@@ -1,7 +1,10 @@
+using System.Data;
 using System.Threading.Channels;
 using Api.Data;
 using Api.Models;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using NpgsqlTypes;
 
 namespace Api.Services.Logging;
 
@@ -48,7 +51,7 @@ public class EventLogWorker(
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
-                log.LogError(ex, "EventLogWorker batch failure");
+                log.LogError(ex, "EventLogWorker batch failure (dropped {Count} events)", buffer.Count);
                 buffer.Clear();
                 await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
             }
@@ -62,11 +65,71 @@ public class EventLogWorker(
         }
     }
 
+    // Uses Npgsql binary COPY instead of EF Core multi-row INSERT — 5–10× faster for
+    // append-only bulk writes. Drawbacks for this table are minimal: no change tracking
+    // is needed, no FK constraints, and `Id` / `Timestamp` defaults aren't used (we
+    // supply Timestamp from C#, and Id is omitted so Postgres auto-generates it).
     private async Task FlushAsync(List<EventLog> batch, CancellationToken ct)
     {
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        await db.EventLogs.AddRangeAsync(batch, ct);
-        await db.SaveChangesAsync(ct);
+        var conn = (NpgsqlConnection)db.Database.GetDbConnection();
+        if (conn.State != ConnectionState.Open) await conn.OpenAsync(ct);
+
+        const string copyCmd =
+            "COPY event_logs (\"Timestamp\", \"Level\", \"EventType\", \"Message\", " +
+            "\"TraceId\", \"UserId\", \"Endpoint\", \"HttpMethod\", \"StatusCode\", " +
+            "\"DurationMs\", \"Concurrency\", \"Source\", \"MetadataJson\") " +
+            "FROM STDIN (FORMAT BINARY)";
+
+        await using var writer = await conn.BeginBinaryImportAsync(copyCmd, ct);
+        foreach (var e in batch)
+        {
+            await writer.StartRowAsync(ct);
+
+            // Timestamp must be DateTimeKind.Utc for `timestamp with time zone` in Npgsql 8+.
+            var ts = e.Timestamp.Kind == DateTimeKind.Utc ? e.Timestamp : e.Timestamp.ToUniversalTime();
+            await writer.WriteAsync(ts, NpgsqlDbType.TimestampTz, ct);
+
+            await writer.WriteAsync((int)e.Level, NpgsqlDbType.Integer, ct);
+            await writer.WriteAsync(e.EventType, NpgsqlDbType.Text, ct);
+
+            await WriteNullableText(writer, e.Message, ct);
+            await WriteNullableText(writer, e.TraceId, ct);
+            await WriteNullableUuid(writer, e.UserId, ct);
+            await WriteNullableText(writer, e.Endpoint, ct);
+            await WriteNullableText(writer, e.HttpMethod, ct);
+            await WriteNullableInt(writer, e.StatusCode, ct);
+            await WriteNullableBigint(writer, e.DurationMs, ct);
+            await WriteNullableInt(writer, e.Concurrency, ct);
+            await WriteNullableText(writer, e.Source, ct);
+            await WriteNullableText(writer, e.MetadataJson, ct);
+        }
+
+        await writer.CompleteAsync(ct);
+    }
+
+    private static async Task WriteNullableText(NpgsqlBinaryImporter w, string? v, CancellationToken ct)
+    {
+        if (v is null) await w.WriteNullAsync(ct);
+        else await w.WriteAsync(v, NpgsqlDbType.Text, ct);
+    }
+
+    private static async Task WriteNullableUuid(NpgsqlBinaryImporter w, Guid? v, CancellationToken ct)
+    {
+        if (v is null) await w.WriteNullAsync(ct);
+        else await w.WriteAsync(v.Value, NpgsqlDbType.Uuid, ct);
+    }
+
+    private static async Task WriteNullableInt(NpgsqlBinaryImporter w, int? v, CancellationToken ct)
+    {
+        if (v is null) await w.WriteNullAsync(ct);
+        else await w.WriteAsync(v.Value, NpgsqlDbType.Integer, ct);
+    }
+
+    private static async Task WriteNullableBigint(NpgsqlBinaryImporter w, long? v, CancellationToken ct)
+    {
+        if (v is null) await w.WriteNullAsync(ct);
+        else await w.WriteAsync(v.Value, NpgsqlDbType.Bigint, ct);
     }
 }

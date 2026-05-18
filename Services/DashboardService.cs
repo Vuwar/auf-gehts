@@ -1,43 +1,77 @@
 using Api.Data;
 using Api.DTOs.Responses;
 using Api.Models;
-using Api.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace Api.Services;
 
-public class DashboardService(
-    AppDbContext db,
-    WordSetService setService,
-    IWeekRepository weekRepo,
-    IProgressRepository progressRepo,
-    IUserRepository userRepo)
+public class DashboardService(IServiceScopeFactory scopeFactory)
 {
     public async Task<DashboardResponse> GetAsync(Guid userId)
     {
-        var me = await userRepo.GetByIdAsync(userId);
-        var vocab = await setService.EnsureVocabSetAsync(userId);
         var weekAgo = DateTime.UtcNow.AddDays(-7);
 
-        var vocabCounts = await db.Words
-            .Where(w => w.WordSetId == vocab.Id)
-            .GroupBy(_ => 1)
-            .Select(g => new
-            {
-                Total = g.Count(),
-                ThisWeek = g.Count(w => w.CreatedAt >= weekAgo)
-            })
-            .FirstOrDefaultAsync() ?? new { Total = 0, ThisWeek = 0 };
+        // Phase 1: fan out the independent reads in parallel. Each task gets its own
+        // scope (= own DbContext + own connection — EF can't run concurrent ops on a
+        // single context). The connection pool naturally queues anything beyond the
+        // configured Maximum Pool Size; wall-clock per request becomes roughly
+        // max(query) rather than sum(query).
+        var meTask = Scoped(d => d.Users
+            .Where(u => u.Id == userId)
+            .Select(u => new { u.CurrentStreak, u.LongestStreak })
+            .FirstOrDefaultAsync());
 
-        var progressCounts = await db.UserSetProgress
-            .Where(p => p.UserId == userId)
-            .GroupBy(_ => 1)
-            .Select(g => new
-            {
-                Active = g.Count(p => p.Status == ProgressStatus.Active),
-                Completed = g.Count(p => p.Status == ProgressStatus.Completed)
-            })
-            .FirstOrDefaultAsync() ?? new { Active = 0, Completed = 0 };
+        var vocabChainTask = ScopedAsync(async sp =>
+        {
+            var sets = sp.GetRequiredService<WordSetService>();
+            var d = sp.GetRequiredService<AppDbContext>();
+            var vocab = await sets.EnsureVocabSetAsync(userId);
+            return await d.Words
+                .Where(w => w.WordSetId == vocab.Id)
+                .GroupBy(_ => 1)
+                .Select(g => new VocabCounts(g.Count(), g.Count(w => w.CreatedAt >= weekAgo)))
+                .FirstOrDefaultAsync() ?? new VocabCounts(0, 0);
+        });
+
+        var progressCountsTask = Scoped(async d =>
+            await d.UserSetProgress
+                .Where(p => p.UserId == userId)
+                .GroupBy(_ => 1)
+                .Select(g => new ProgressCounts(
+                    g.Count(p => p.Status == ProgressStatus.Active),
+                    g.Count(p => p.Status == ProgressStatus.Completed)))
+                .FirstOrDefaultAsync() ?? new ProgressCounts(0, 0));
+
+        var weeksTask = Scoped(d => d.Weeks.OrderBy(w => w.Number).ToListAsync());
+
+        var setsByWeekTask = Scoped(d => d.WordSets
+            .Where(s => s.WeekId != null && s.IsOfficial && s.IsPublic)
+            .Select(s => new SetWeekRow(s.Id, s.WeekId!.Value))
+            .ToListAsync());
+
+        var statusesTask = Scoped(async d =>
+        {
+            var rows = await d.UserSetProgress
+                .Where(p => p.UserId == userId)
+                .Select(p => new { p.WordSetId, p.Status })
+                .ToListAsync();
+            return rows.ToDictionary(r => r.WordSetId, r => r.Status);
+        });
+
+        var othersTask = Scoped(d => d.Users
+            .Where(u => u.Id != userId)
+            .Select(u => new OtherUserRow(u.Id, u.DisplayName, u.Email, u.CurrentStreak))
+            .ToListAsync());
+
+        await Task.WhenAll(meTask, vocabChainTask, progressCountsTask, weeksTask, setsByWeekTask, statusesTask, othersTask);
+
+        var me = await meTask;
+        var vocabCounts = await vocabChainTask;
+        var progressCounts = await progressCountsTask;
+        var weeks = await weeksTask;
+        var setsByWeek = await setsByWeekTask;
+        var statuses = await statusesTask;
+        var others = await othersTask;
 
         var stats = new StatsResponse(
             vocabCounts.Total,
@@ -45,13 +79,6 @@ public class DashboardService(
             progressCounts.Completed,
             vocabCounts.ThisWeek
         );
-
-        var weeks = await weekRepo.GetAllAsync();
-        var setsByWeek = await db.WordSets
-            .Where(s => s.WeekId != null && s.IsOfficial && s.IsPublic)
-            .Select(s => new { s.Id, WeekId = s.WeekId!.Value })
-            .ToListAsync();
-        var statuses = await progressRepo.GetStatusesForUserAsync(userId);
 
         var weekSetMap = setsByWeek.GroupBy(x => x.WeekId).ToDictionary(g => g.Key, g => g.Select(x => x.Id).ToList());
         var weekResponses = weeks.Select(w =>
@@ -61,25 +88,20 @@ public class DashboardService(
             return new WeekResponse(w.Id, w.Number, w.Title, w.Description, setIds.Count, completed);
         }).ToList();
 
-        // Friends: all other users + current week progress
         var currentWeek = weekResponses.FirstOrDefault(w => w.CompletedCount < w.SetCount) ?? weekResponses.LastOrDefault();
         var currentWeekSetIds = currentWeek is null ? new List<Guid>() : weekSetMap.GetValueOrDefault(currentWeek.Id, []);
 
-        var others = await db.Users
-            .Where(u => u.Id != userId)
-            .Select(u => new { u.Id, u.DisplayName, u.Email, u.CurrentStreak })
-            .ToListAsync();
-
+        // Phase 2: friend completions depends on Phase 1 output.
         var friendIds = others.Select(o => o.Id).ToList();
         var friendCompletions = currentWeekSetIds.Count == 0 || friendIds.Count == 0
             ? new Dictionary<Guid, int>()
-            : await db.UserSetProgress
+            : await Scoped(d => d.UserSetProgress
                 .Where(p => friendIds.Contains(p.UserId)
                          && currentWeekSetIds.Contains(p.WordSetId)
                          && p.Status == ProgressStatus.Completed)
                 .GroupBy(p => p.UserId)
                 .Select(g => new { UserId = g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.UserId, x => x.Count);
+                .ToDictionaryAsync(x => x.UserId, x => x.Count));
 
         var friends = others.Select(o => new FriendProgressResponse(
             o.Id,
@@ -99,4 +121,22 @@ public class DashboardService(
             friends
         );
     }
+
+    private async Task<T> Scoped<T>(Func<AppDbContext, Task<T>> work)
+    {
+        using var scope = scopeFactory.CreateScope();
+        var d = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        return await work(d);
+    }
+
+    private async Task<T> ScopedAsync<T>(Func<IServiceProvider, Task<T>> work)
+    {
+        using var scope = scopeFactory.CreateScope();
+        return await work(scope.ServiceProvider);
+    }
+
+    private record VocabCounts(int Total, int ThisWeek);
+    private record ProgressCounts(int Active, int Completed);
+    private record SetWeekRow(Guid Id, Guid WeekId);
+    private record OtherUserRow(Guid Id, string? DisplayName, string Email, int CurrentStreak);
 }

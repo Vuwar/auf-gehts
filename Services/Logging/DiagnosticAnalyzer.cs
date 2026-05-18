@@ -4,22 +4,35 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Api.Services.Logging;
 
-public class DiagnosticAnalyzer(AppDbContext db, ConcurrencyTracker concurrency)
+public class DiagnosticAnalyzer(IServiceScopeFactory scopeFactory, ConcurrencyTracker concurrency)
 {
-    public async Task<DiagnosticReport> RunAsync(int hours)
+    public async Task<DiagnosticReport> RunAsync(int minutes)
     {
-        hours = Math.Clamp(hours, 1, 168);
-        var since = DateTime.UtcNow.AddHours(-hours);
+        minutes = Math.Clamp(minutes, 1, 168 * 60);
+        var since = DateTime.UtcNow.AddMinutes(-minutes);
 
-        var totals = await ComputeTotalsAsync(since);
+        // Fan out all 7 analyses in parallel — each gets its own DbContext + connection
+        // (EF Core doesn't allow concurrent ops on a single context). Pool naturally queues
+        // any beyond the configured Maximum Pool Size; wall-clock time becomes roughly
+        // max(query) rather than sum(query).
+        var totalsTask    = Scoped(d => ComputeTotalsAsync(d, since));
+        var slowConcTask  = Scoped(d => FindSlowUnderConcurrencyAsync(d, since));
+        var dbBottleTask  = Scoped(d => FindDbBottleneckAsync(d, since));
+        var aiTask        = Scoped(d => FindAiDurationAsync(d, since));
+        var cacheTask     = Scoped(d => FindCacheInefficiencyAsync(d, since));
+        var netTask       = Scoped(d => FindNetworkOverheadAsync(d, since));
+        var rateTask      = Scoped(d => FindRateLimitPressureAsync(d, since));
+
+        await Task.WhenAll(totalsTask, slowConcTask, dbBottleTask, aiTask, cacheTask, netTask, rateTask);
+
+        var totals = await totalsTask;
         var findings = new List<DiagnosticFinding>();
-
-        findings.AddRange(await FindSlowUnderConcurrencyAsync(since));
-        findings.AddRange(await FindDbBottleneckAsync(since));
-        findings.AddRange(await FindAiDurationAsync(since));
-        findings.AddRange(await FindCacheInefficiencyAsync(since));
-        findings.AddRange(await FindNetworkOverheadAsync(since));
-        findings.AddRange(await FindRateLimitPressureAsync(since));
+        findings.AddRange(await slowConcTask);
+        findings.AddRange(await dbBottleTask);
+        findings.AddRange(await aiTask);
+        findings.AddRange(await cacheTask);
+        findings.AddRange(await netTask);
+        findings.AddRange(await rateTask);
 
         if (totals.Requests < 20)
         {
@@ -35,10 +48,18 @@ public class DiagnosticAnalyzer(AppDbContext db, ConcurrencyTracker concurrency)
             .ThenBy(f => f.Category)
             .ToList();
 
-        return new DiagnosticReport(hours, since, totals, findings);
+        var windowHours = Math.Max(1, (int)Math.Round(minutes / 60.0));
+        return new DiagnosticReport(windowHours, since, totals, findings);
     }
 
-    private async Task<DiagnosticTotals> ComputeTotalsAsync(DateTime since)
+    private async Task<T> Scoped<T>(Func<AppDbContext, Task<T>> work)
+    {
+        using var scope = scopeFactory.CreateScope();
+        var d = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        return await work(d);
+    }
+
+    private async Task<DiagnosticTotals> ComputeTotalsAsync(AppDbContext db, DateTime since)
     {
         var rows = await db.Database.SqlQueryRaw<TotalsRow>(
             """
@@ -57,7 +78,7 @@ public class DiagnosticAnalyzer(AppDbContext db, ConcurrencyTracker concurrency)
         return new DiagnosticTotals(r.Requests, r.SlowRequests, r.Errors, r.P50Ms, r.P95Ms, r.P99Ms, concurrency.Peak);
     }
 
-    private async Task<List<DiagnosticFinding>> FindSlowUnderConcurrencyAsync(DateTime since)
+    private async Task<List<DiagnosticFinding>> FindSlowUnderConcurrencyAsync(AppDbContext db, DateTime since)
     {
         var rows = await db.Database.SqlQueryRaw<ConcurrencySlowRow>(
             """
@@ -97,14 +118,21 @@ public class DiagnosticAnalyzer(AppDbContext db, ConcurrencyTracker concurrency)
         return findings;
     }
 
-    private async Task<List<DiagnosticFinding>> FindDbBottleneckAsync(DateTime since)
+    private async Task<List<DiagnosticFinding>> FindDbBottleneckAsync(AppDbContext db, DateTime since)
     {
-        var slowCount = await db.EventLogs.AsNoTracking()
-            .Where(e => e.Timestamp >= since && e.EventType == "db.slow_query")
-            .CountAsync();
-        var failCount = await db.EventLogs.AsNoTracking()
-            .Where(e => e.Timestamp >= since && e.EventType == "db.query_failed")
-            .CountAsync();
+        // Two independent counts in one round-trip via a single query.
+        var rows = await db.Database.SqlQueryRaw<DbBottleneckRow>(
+            """
+            SELECT
+                count(*) FILTER (WHERE "EventType" = 'db.slow_query') AS "SlowCount",
+                count(*) FILTER (WHERE "EventType" = 'db.query_failed') AS "FailCount"
+            FROM event_logs
+            WHERE "Timestamp" >= {0}
+            """, since).ToListAsync();
+
+        var row = rows.FirstOrDefault() ?? new DbBottleneckRow();
+        var slowCount = row.SlowCount;
+        var failCount = row.FailCount;
 
         var findings = new List<DiagnosticFinding>();
         if (slowCount >= 30)
@@ -131,7 +159,7 @@ public class DiagnosticAnalyzer(AppDbContext db, ConcurrencyTracker concurrency)
         return findings;
     }
 
-    private async Task<List<DiagnosticFinding>> FindAiDurationAsync(DateTime since)
+    private async Task<List<DiagnosticFinding>> FindAiDurationAsync(AppDbContext db, DateTime since)
     {
         var rows = await db.Database.SqlQueryRaw<AiStatsRow>(
             """
@@ -166,7 +194,7 @@ public class DiagnosticAnalyzer(AppDbContext db, ConcurrencyTracker concurrency)
         return findings;
     }
 
-    private async Task<List<DiagnosticFinding>> FindCacheInefficiencyAsync(DateTime since)
+    private async Task<List<DiagnosticFinding>> FindCacheInefficiencyAsync(AppDbContext db, DateTime since)
     {
         var rows = await db.EventLogs.AsNoTracking()
             .Where(e => e.Timestamp >= since && (e.EventType == "cache.hit" || e.EventType == "cache.miss"))
@@ -205,7 +233,7 @@ public class DiagnosticAnalyzer(AppDbContext db, ConcurrencyTracker concurrency)
         return findings;
     }
 
-    private async Task<List<DiagnosticFinding>> FindNetworkOverheadAsync(DateTime since)
+    private async Task<List<DiagnosticFinding>> FindNetworkOverheadAsync(AppDbContext db, DateTime since)
     {
         var rows = await db.Database.SqlQueryRaw<NetworkOverheadRow>(
             """
@@ -245,7 +273,7 @@ public class DiagnosticAnalyzer(AppDbContext db, ConcurrencyTracker concurrency)
         return findings;
     }
 
-    private async Task<List<DiagnosticFinding>> FindRateLimitPressureAsync(DateTime since)
+    private async Task<List<DiagnosticFinding>> FindRateLimitPressureAsync(AppDbContext db, DateTime since)
     {
         var count = await db.EventLogs.AsNoTracking()
             .Where(e => e.Timestamp >= since && e.EventType == "ratelimit.exceeded")
@@ -285,6 +313,11 @@ public class DiagnosticAnalyzer(AppDbContext db, ConcurrencyTracker concurrency)
         public double ConcurrentMs { get; set; }
         public long SoloSamples { get; set; }
         public long ConcurrentSamples { get; set; }
+    }
+    public class DbBottleneckRow
+    {
+        public long SlowCount { get; set; }
+        public long FailCount { get; set; }
     }
     public class AiStatsRow
     {

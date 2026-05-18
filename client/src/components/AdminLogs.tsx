@@ -21,7 +21,8 @@ export default function AdminLogs() {
   const [endpoint, setEndpoint] = useState('')
   const [traceId, setTraceId] = useState('')
   const [minDurationMs, setMinDurationMs] = useState<number | ''>('')
-  const [hours, setHours] = useState(1)
+  const [windowMinutes, setWindowMinutes] = useState(60)
+  const [windowInput, setWindowInput] = useState('60m')
   const [page, setPage] = useState(1)
   const pageSize = 50
 
@@ -29,14 +30,14 @@ export default function AdminLogs() {
     setLoading(true)
     try {
       const [s, p] = await Promise.all([
-        api.adminLogsStats(hours),
+        api.adminLogsStats(windowMinutes),
         api.adminQueryLogs({
           level: level || undefined,
           eventType: eventType || undefined,
           endpoint: endpoint || undefined,
           traceId: traceId || undefined,
           minDurationMs: minDurationMs === '' ? undefined : Number(minDurationMs),
-          since: new Date(Date.now() - hours * 3600_000).toISOString(),
+          since: new Date(Date.now() - windowMinutes * 60_000).toISOString(),
           page,
           pageSize,
         }),
@@ -45,21 +46,40 @@ export default function AdminLogs() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { refresh() }, [hours, level, eventType, endpoint, traceId, minDurationMs, page])
+  useEffect(() => { refresh() }, [windowMinutes, level, eventType, endpoint, traceId, minDurationMs, page])
 
   const runDiagnose = async () => {
     setDiagLoading(true)
-    try { setDiag(await api.adminLogsDiagnose(hours)) }
+    try { setDiag(await api.adminLogsDiagnose(windowMinutes)) }
     finally { setDiagLoading(false) }
   }
 
-  useEffect(() => { runDiagnose() }, [hours])
+  useEffect(() => { runDiagnose() }, [windowMinutes])
 
   useEffect(() => {
     if (!auto) return
     const t = setInterval(refresh, REFRESH_MS)
     return () => clearInterval(t)
-  }, [auto, hours, level, eventType, endpoint, traceId, minDurationMs, page])
+  }, [auto, windowMinutes, level, eventType, endpoint, traceId, minDurationMs, page])
+
+  const applyWindowInput = () => {
+    const parsed = parseDurationToMinutes(windowInput)
+    if (parsed === null) return
+    const clamped = Math.max(1, Math.min(168 * 60, parsed))
+    setWindowMinutes(clamped)
+    setWindowInput(formatMinutes(clamped))
+    setPage(1)
+  }
+
+  const presets: { label: string; minutes: number }[] = [
+    { label: '5m', minutes: 5 },
+    { label: '15m', minutes: 15 },
+    { label: '30m', minutes: 30 },
+    { label: '1h', minutes: 60 },
+    { label: '6h', minutes: 360 },
+    { label: '24h', minutes: 1440 },
+    { label: '7d', minutes: 10080 },
+  ]
 
   if (profile && profile.role !== 'Admin') return <Navigate to="/dashboard" replace />
 
@@ -116,7 +136,7 @@ export default function AdminLogs() {
           <StatCard label="Inflight" value={stats.concurrencyCurrent} accent />
           <StatCard label="Peak" value={stats.concurrencyPeak} />
           <StatCard label="Slow queries" value={stats.slowQueryCount} />
-          <StatCard label="Window (h)" value={hours} />
+          <StatCard label="Window" value={formatMinutes(windowMinutes)} />
         </div>
       )}
 
@@ -146,7 +166,7 @@ export default function AdminLogs() {
 
       {stats && stats.byTypeAndLevel.length > 0 && (
         <>
-          <h2 className="section-title">Event types ({hours}h)</h2>
+          <h2 className="section-title">Event types ({formatMinutes(windowMinutes)})</h2>
           <div className="logs-chip-row">
             {stats.byTypeAndLevel.map(b => (
               <button
@@ -171,12 +191,29 @@ export default function AdminLogs() {
         <input type="text" placeholder="Endpoint" value={endpoint} onChange={e => { setEndpoint(e.target.value); setPage(1) }} />
         <input type="text" placeholder="Trace id" value={traceId} onChange={e => { setTraceId(e.target.value); setPage(1) }} />
         <input type="number" placeholder="Min ms" value={minDurationMs} onChange={e => { setMinDurationMs(e.target.value === '' ? '' : Number(e.target.value)); setPage(1) }} />
-        <select value={hours} onChange={e => { setHours(Number(e.target.value)); setPage(1) }}>
-          <option value={1}>Last 1h</option>
-          <option value={6}>Last 6h</option>
-          <option value={24}>Last 24h</option>
-          <option value={168}>Last 7d</option>
-        </select>
+        <div className="logs-window-picker">
+          <span className="hint">Window</span>
+          {presets.map(p => (
+            <button
+              key={p.minutes}
+              type="button"
+              onClick={() => { setWindowMinutes(p.minutes); setWindowInput(p.label); setPage(1) }}
+              className={`tab-toggle-btn ${windowMinutes === p.minutes ? 'active' : ''}`}
+            >
+              {p.label}
+            </button>
+          ))}
+          <input
+            type="text"
+            value={windowInput}
+            onChange={e => setWindowInput(e.target.value)}
+            onBlur={applyWindowInput}
+            onKeyDown={e => { if (e.key === 'Enter') { (e.target as HTMLInputElement).blur() } }}
+            placeholder="e.g. 43m, 2h, 90s"
+            aria-label="Custom window (e.g. 43m, 2h, 1d, 90s)"
+            style={{ width: '110px' }}
+          />
+        </div>
         <button onClick={refresh} disabled={loading} className="deck-btn">{loading ? '...' : '↻'}</button>
       </div>
 
@@ -212,7 +249,7 @@ export default function AdminLogs() {
   )
 }
 
-function StatCard({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
+function StatCard({ label, value, accent }: { label: string; value: number | string; accent?: boolean }) {
   return (
     <div className={`logs-stat-card ${accent ? 'accent' : ''}`}>
       <span className="card-label">{label}</span>
@@ -254,4 +291,31 @@ function LogRow({ entry }: { entry: LogEntry }) {
 
 function tryPretty(s: string): string {
   try { return JSON.stringify(JSON.parse(s), null, 2) } catch { return s }
+}
+
+// Parse a duration string like "5m", "43m", "2h", "1d", "90s", or a bare number (minutes).
+// Returns minutes (rounded up to 1) or null when unparseable.
+function parseDurationToMinutes(input: string): number | null {
+  const s = input.trim().toLowerCase()
+  if (!s) return null
+  const m = s.match(/^(\d+(?:\.\d+)?)\s*(s|sec|secs|m|min|mins|h|hr|hrs|d|day|days)?$/)
+  if (!m) return null
+  const n = Number(m[1])
+  if (!isFinite(n) || n < 0) return null
+  const unit = m[2] ?? 'm'
+  let minutes: number
+  if (unit.startsWith('s')) minutes = n / 60
+  else if (unit.startsWith('h')) minutes = n * 60
+  else if (unit.startsWith('d')) minutes = n * 60 * 24
+  else minutes = n // m / min / mins / default
+  return Math.max(1, Math.round(minutes))
+}
+
+function formatMinutes(mins: number): string {
+  if (mins < 60) return `${mins}m`
+  if (mins % 1440 === 0) return `${mins / 1440}d`
+  if (mins % 60 === 0) return `${mins / 60}h`
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return `${h}h ${m}m`
 }

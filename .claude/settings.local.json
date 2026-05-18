@@ -36,7 +36,8 @@
       "Bash(env)",
       "Bash(cmd.exe //c \"dir /A appsettings* 2>nul\")",
       "Bash(cmd.exe //c \"set\")",
-      "Bash(dotnet ef *)"
+      "Bash(dotnet ef *)",
+      "Bash(grep -nA 4 \"GetByIdAsync\\\\|GetAllAsync\\\\|GetStatusesForUserAsync\" Repositories/UserRepository.cs Repositories/WeekRepository.cs Repositories/ProgressRepository.cs)"
     ]
   }
 }

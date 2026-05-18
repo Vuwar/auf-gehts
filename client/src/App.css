@@ -2784,6 +2784,18 @@ input[type="checkbox"] {
   align-items: center;
 }
 
+.logs-window-picker {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.logs-window-picker .hint {
+  margin-right: 4px;
+}
+
 .logs-table-wrap {
   overflow-x: auto;
   border: 1px solid var(--border);
