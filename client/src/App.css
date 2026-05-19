@@ -2921,3 +2921,110 @@ input[type="checkbox"] {
 
 .diag-card details { font-size: 12px; }
 .diag-card details summary { cursor: pointer; opacity: 0.7; }
+
+/* PWA install prompt */
+.install-prompt {
+  position: fixed;
+  left: 50%;
+  bottom: calc(72px + env(safe-area-inset-bottom, 0px) + 12px);
+  transform: translateX(-50%);
+  z-index: 900;
+  width: min(560px, calc(100vw - 24px));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  animation: install-prompt-in 0.25s ease-out;
+}
+
+@keyframes install-prompt-in {
+  from { transform: translate(-50%, 16px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+.install-prompt-body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.install-prompt-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.install-prompt-text {
+  min-width: 0;
+}
+
+.install-prompt-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-h);
+}
+
+.install-prompt-desc {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.85;
+  margin-top: 2px;
+}
+
+.install-prompt-kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  margin: 0 2px;
+}
+
+.install-prompt-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.install-prompt-btn {
+  font: inherit;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-h);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.install-prompt-btn:hover {
+  background: var(--bg);
+}
+
+.install-prompt-btn.primary {
+  background: var(--accent);
+  color: #0f1015;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.install-prompt-btn.primary:hover {
+  filter: brightness(1.05);
+}
+
+@media (max-width: 480px) {
+  .install-prompt {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .install-prompt-actions {
+    justify-content: flex-end;
+  }
+}

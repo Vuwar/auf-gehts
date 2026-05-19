@@ -12,6 +12,7 @@ import UserMenu from './components/UserMenu'
 import Alphabet from './components/Alphabet'
 import LoadingBar from './components/LoadingBar'
 import OfflineIndicator from './components/OfflineIndicator'
+import InstallPrompt from './components/InstallPrompt'
 import { AuthProvider, useAuth } from './auth'
 import './App.css'
 
@@ -76,6 +77,7 @@ function ProtectedLayout() {
     <div className="app-shell">
       <LoadingBar />
       <OfflineIndicator />
+      <InstallPrompt />
       <TopBar />
       <main className="app-content">
         <Outlet />
