@@ -191,7 +191,9 @@ builder.Services.AddOutputCache(opts =>
 {
     opts.AddBasePolicy(b => b.NoCache());
     opts.AddPolicy("PerUser", b => b
-        .SetVaryByHeader("Authorization")
+        .VaryByValue(ctx => new KeyValuePair<string, string>(
+            "uid",
+            ctx.User.FindFirst("sub")?.Value ?? ""))
         .Expire(TimeSpan.FromSeconds(30)));
     opts.AddPolicy("Public60", b => b.Expire(TimeSpan.FromSeconds(60)));
 });

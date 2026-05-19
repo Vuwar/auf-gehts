@@ -2,79 +2,54 @@ using Api.Data;
 using Api.DTOs.Responses;
 using Api.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Api.Services;
 
-public class DashboardService(IServiceScopeFactory scopeFactory)
+public class DashboardService(AppDbContext db, WordSetService sets, IMemoryCache cache)
 {
-    // Cap fan-out per dashboard request. Sized for the 50-connection pool on the
-    // Supabase transaction pooler (port 6543): 8 == full parallelism for the queries
-    // below, so the semaphore never throttles a single request. The cap remains as
-    // defense-in-depth if the fan-out grows or the pool shrinks.
-    private const int MaxConcurrentScopes = 8;
+    private const string WeeksCacheKey = "dashboard:weeks";
+    private const string SetsByWeekCacheKey = "dashboard:setsByWeek";
+    private static readonly TimeSpan SharedCacheTtl = TimeSpan.FromSeconds(60);
 
     public async Task<DashboardResponse> GetAsync(Guid userId)
     {
         var weekAgo = DateTime.UtcNow.AddDays(-7);
 
-        using var gate = new SemaphoreSlim(MaxConcurrentScopes, MaxConcurrentScopes);
-
-        var meTask = Scoped(gate, d => d.Users
+        var me = await db.Users
             .Where(u => u.Id == userId)
             .Select(u => new { u.CurrentStreak, u.LongestStreak })
-            .FirstOrDefaultAsync());
+            .FirstOrDefaultAsync();
 
-        var vocabChainTask = ScopedAsync(gate, async sp =>
-        {
-            var sets = sp.GetRequiredService<WordSetService>();
-            var d = sp.GetRequiredService<AppDbContext>();
-            var vocab = await sets.EnsureVocabSetAsync(userId);
-            return await d.Words
-                .Where(w => w.WordSetId == vocab.Id)
-                .GroupBy(_ => 1)
-                .Select(g => new VocabCounts(g.Count(), g.Count(w => w.CreatedAt >= weekAgo)))
-                .FirstOrDefaultAsync() ?? new VocabCounts(0, 0);
-        });
+        var vocab = await sets.EnsureVocabSetAsync(userId);
 
-        var progressCountsTask = Scoped(gate, async d =>
-            await d.UserSetProgress
-                .Where(p => p.UserId == userId)
-                .GroupBy(_ => 1)
-                .Select(g => new ProgressCounts(
-                    g.Count(p => p.Status == ProgressStatus.Active),
-                    g.Count(p => p.Status == ProgressStatus.Completed)))
-                .FirstOrDefaultAsync() ?? new ProgressCounts(0, 0));
+        var vocabCounts = await db.Words
+            .Where(w => w.WordSetId == vocab.Id)
+            .GroupBy(_ => 1)
+            .Select(g => new VocabCounts(g.Count(), g.Count(w => w.CreatedAt >= weekAgo)))
+            .FirstOrDefaultAsync() ?? new VocabCounts(0, 0);
 
-        var weeksTask = Scoped(gate, d => d.Weeks.OrderBy(w => w.Number).ToListAsync());
+        var progressCounts = await db.UserSetProgress
+            .Where(p => p.UserId == userId)
+            .GroupBy(_ => 1)
+            .Select(g => new ProgressCounts(
+                g.Count(p => p.Status == ProgressStatus.Active),
+                g.Count(p => p.Status == ProgressStatus.Completed)))
+            .FirstOrDefaultAsync() ?? new ProgressCounts(0, 0);
 
-        var setsByWeekTask = Scoped(gate, d => d.WordSets
-            .Where(s => s.WeekId != null && s.IsOfficial && s.IsPublic)
-            .Select(s => new SetWeekRow(s.Id, s.WeekId!.Value))
-            .ToListAsync());
+        var weeks = await GetWeeksCachedAsync();
+        var setsByWeek = await GetSetsByWeekCachedAsync();
 
-        var statusesTask = Scoped(gate, async d =>
-        {
-            var rows = await d.UserSetProgress
-                .Where(p => p.UserId == userId)
-                .Select(p => new { p.WordSetId, p.Status })
-                .ToListAsync();
-            return rows.ToDictionary(r => r.WordSetId, r => r.Status);
-        });
+        var statusRows = await db.UserSetProgress
+            .Where(p => p.UserId == userId)
+            .Select(p => new { p.WordSetId, p.Status })
+            .ToListAsync();
+        var statuses = statusRows.ToDictionary(r => r.WordSetId, r => r.Status);
 
-        var othersTask = Scoped(gate, d => d.Users
+        var others = await db.Users
             .Where(u => u.Id != userId)
-            .Select(u => new OtherUserRow(u.Id, u.DisplayName, u.Email, u.CurrentStreak))
-            .ToListAsync());
-
-        await Task.WhenAll(meTask, vocabChainTask, progressCountsTask, weeksTask, setsByWeekTask, statusesTask, othersTask);
-
-        var me = await meTask;
-        var vocabCounts = await vocabChainTask;
-        var progressCounts = await progressCountsTask;
-        var weeks = await weeksTask;
-        var setsByWeek = await setsByWeekTask;
-        var statuses = await statusesTask;
-        var others = await othersTask;
+            .Select(u => new OtherUserRow(u.Id, u.DisplayName, u.CurrentStreak))
+            .ToListAsync();
 
         var stats = new StatsResponse(
             vocabCounts.Total,
@@ -94,21 +69,20 @@ public class DashboardService(IServiceScopeFactory scopeFactory)
         var currentWeek = weekResponses.FirstOrDefault(w => w.CompletedCount < w.SetCount) ?? weekResponses.LastOrDefault();
         var currentWeekSetIds = currentWeek is null ? new List<Guid>() : weekSetMap.GetValueOrDefault(currentWeek.Id, []);
 
-        // Phase 2: friend completions depends on Phase 1 output.
         var friendIds = others.Select(o => o.Id).ToList();
         var friendCompletions = currentWeekSetIds.Count == 0 || friendIds.Count == 0
             ? new Dictionary<Guid, int>()
-            : await Scoped(gate, d => d.UserSetProgress
+            : await db.UserSetProgress
                 .Where(p => friendIds.Contains(p.UserId)
                          && currentWeekSetIds.Contains(p.WordSetId)
                          && p.Status == ProgressStatus.Completed)
                 .GroupBy(p => p.UserId)
                 .Select(g => new { UserId = g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.UserId, x => x.Count));
+                .ToDictionaryAsync(x => x.UserId, x => x.Count);
 
         var friends = others.Select(o => new FriendProgressResponse(
             o.Id,
-            o.DisplayName ?? o.Email,
+            o.DisplayName ?? "User",
             o.CurrentStreak,
             currentWeek?.Number,
             currentWeek?.Title,
@@ -125,31 +99,25 @@ public class DashboardService(IServiceScopeFactory scopeFactory)
         );
     }
 
-    private async Task<T> Scoped<T>(SemaphoreSlim gate, Func<AppDbContext, Task<T>> work)
-    {
-        await gate.WaitAsync();
-        try
+    private Task<List<Week>> GetWeeksCachedAsync() =>
+        cache.GetOrCreateAsync(WeeksCacheKey, entry =>
         {
-            using var scope = scopeFactory.CreateScope();
-            var d = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return await work(d);
-        }
-        finally { gate.Release(); }
-    }
+            entry.AbsoluteExpirationRelativeToNow = SharedCacheTtl;
+            return db.Weeks.OrderBy(w => w.Number).ToListAsync();
+        })!;
 
-    private async Task<T> ScopedAsync<T>(SemaphoreSlim gate, Func<IServiceProvider, Task<T>> work)
-    {
-        await gate.WaitAsync();
-        try
+    private Task<List<SetWeekRow>> GetSetsByWeekCachedAsync() =>
+        cache.GetOrCreateAsync(SetsByWeekCacheKey, entry =>
         {
-            using var scope = scopeFactory.CreateScope();
-            return await work(scope.ServiceProvider);
-        }
-        finally { gate.Release(); }
-    }
+            entry.AbsoluteExpirationRelativeToNow = SharedCacheTtl;
+            return db.WordSets
+                .Where(s => s.WeekId != null && s.IsOfficial && s.IsPublic)
+                .Select(s => new SetWeekRow(s.Id, s.WeekId!.Value))
+                .ToListAsync();
+        })!;
 
     private record VocabCounts(int Total, int ThisWeek);
     private record ProgressCounts(int Active, int Completed);
-    private record SetWeekRow(Guid Id, Guid WeekId);
-    private record OtherUserRow(Guid Id, string? DisplayName, string Email, int CurrentStreak);
+    public record SetWeekRow(Guid Id, Guid WeekId);
+    private record OtherUserRow(Guid Id, string? DisplayName, int CurrentStreak);
 }
