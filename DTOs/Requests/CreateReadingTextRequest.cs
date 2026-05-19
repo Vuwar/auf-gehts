@@ -5,6 +5,7 @@ public record CreateReadingTextRequest(
     string Content,
     string? Level,
     Guid? WeekId,
+    bool? GenerateAudio,
     List<CreateReadingTextQuestion>? Questions
 );
 

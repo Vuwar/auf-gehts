@@ -9,6 +9,7 @@ import Profile from './components/Profile'
 import Login from './components/Login'
 import Abenteuer from './components/Abenteuer'
 import UserMenu from './components/UserMenu'
+import RequestsBell from './components/RequestsBell'
 import Alphabet from './components/Alphabet'
 import LoadingBar from './components/LoadingBar'
 import OfflineIndicator from './components/OfflineIndicator'
@@ -37,6 +38,7 @@ function TopBar() {
         <NavLink to="/library" className={({ isActive }) => `top-bar-link ${isActive ? 'active' : ''}`}>Library</NavLink>
         <NavLink to="/reader" className={({ isActive }) => `top-bar-link ${isActive ? 'active' : ''}`}>Reader</NavLink>
       </nav>
+      <RequestsBell />
       <UserMenu />
     </header>
   )
@@ -106,6 +108,7 @@ export default function App() {
             <Route path="/reader/:id" element={<ReaderDetail />} />
             <Route path="/alphabet" element={<Alphabet />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/profile/:userId" element={<Profile />} />
             <Route path="/admin/logs" element={<AdminLogs />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>

@@ -114,6 +114,9 @@ export interface ReadingText {
   createdByName: string | null
   isOwner: boolean
   createdAt: string
+  audioUrl: string | null
+  audioDurationSec: number | null
+  audioVoice: string | null
   questions: ReadingTextQuestion[]
 }
 
@@ -141,11 +144,54 @@ export interface FriendProgress {
 }
 
 export interface Dashboard {
-  stats: Stats
-  weeks: Week[]
+  friends: FriendProgress[]
+}
+
+export type FriendshipState =
+  | 'Self'
+  | 'None'
+  | 'PendingOutgoing'
+  | 'PendingIncoming'
+  | 'Friends'
+  | 'Declined'
+
+export interface PublicUserProfile {
+  id: string
+  displayName: string
   currentStreak: number
   longestStreak: number
-  friends: FriendProgress[]
+  friendshipState: FriendshipState
+}
+
+export interface UserDirectoryEntry {
+  id: string
+  displayName: string
+  friendshipState: FriendshipState
+}
+
+export interface UserDirectoryPage {
+  items: UserDirectoryEntry[]
+  page: number
+  pageSize: number
+  total: number
+}
+
+export interface FriendSummary {
+  id: string
+  displayName: string
+  currentStreak: number
+}
+
+export interface FriendRequest {
+  id: string
+  otherUserId: string
+  otherUserDisplayName: string
+  createdAt: string
+}
+
+export interface PendingRequests {
+  incoming: FriendRequest[]
+  outgoing: FriendRequest[]
 }
 
 export type LogLevel = 'Info' | 'Warning' | 'Error' | 'Critical'
@@ -261,7 +307,7 @@ interface ClientSample {
 }
 const sampleBuffer: ClientSample[] = []
 let lastTraceId: string | null = null
-let dashboardInflight: Promise<Dashboard> | null = null
+const dashboardInflight = new Map<string, Promise<Dashboard>>()
 export function getLastTraceId() { return lastTraceId }
 ;(globalThis as any).__appTraces = sampleBuffer
 
@@ -392,16 +438,45 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 
 export const api = {
   getStats: () => request<Stats>(`${API_BASE}/stats`),
-  // Dedupe in-flight dashboard fetches. React StrictMode double-mounts in dev fire the
-  // effect twice; without this each load = 2 network calls = 2× the 7-query fan-out.
-  // Production doesn't double-mount, but coalescing is also useful if two components
-  // happen to request the dashboard simultaneously.
-  getDashboard: () => {
-    if (dashboardInflight) return dashboardInflight
-    dashboardInflight = request<Dashboard>(`${API_BASE}/dashboard`)
-      .finally(() => { dashboardInflight = null })
-    return dashboardInflight
+  // Dedupe in-flight dashboard fetches keyed by weekId. React StrictMode double-mounts
+  // in dev fire the effect twice; coalescing also helps if two components request the
+  // dashboard simultaneously.
+  getDashboard: (weekId: string) => {
+    const existing = dashboardInflight.get(weekId)
+    if (existing) return existing
+    const promise = request<Dashboard>(`${API_BASE}/dashboard?weekId=${encodeURIComponent(weekId)}`)
+      .finally(() => { dashboardInflight.delete(weekId) })
+    dashboardInflight.set(weekId, promise)
+    return promise
   },
+
+  getUserProfile: (userId: string) =>
+    request<PublicUserProfile>(`${API_BASE}/users/${userId}/profile`),
+  browseUsers: (q?: string, page: number = 1, pageSize: number = 25) => {
+    const params = new URLSearchParams()
+    if (q && q.trim()) params.set('q', q.trim())
+    params.set('page', String(page))
+    params.set('pageSize', String(pageSize))
+    return request<UserDirectoryPage>(`${API_BASE}/users/directory?${params.toString()}`)
+  },
+
+  listFriends: () => request<FriendSummary[]>(`${API_BASE}/friends`),
+  listFriendRequests: () => request<PendingRequests>(`${API_BASE}/friends/requests`),
+  getFriendRequestCount: () =>
+    request<{ incoming: number }>(`${API_BASE}/friends/requests/count`),
+  sendFriendRequest: (addresseeId: string) =>
+    request<{ id: string; status: string }>(`${API_BASE}/friends/requests`, {
+      method: 'POST',
+      body: JSON.stringify({ addresseeId }),
+    }),
+  acceptFriendRequest: (id: string) =>
+    request<void>(`${API_BASE}/friends/requests/${id}/accept`, { method: 'POST' }),
+  declineFriendRequest: (id: string) =>
+    request<void>(`${API_BASE}/friends/requests/${id}/decline`, { method: 'POST' }),
+  cancelFriendRequest: (id: string) =>
+    request<void>(`${API_BASE}/friends/requests/${id}`, { method: 'DELETE' }),
+  unfriend: (userId: string) =>
+    request<void>(`${API_BASE}/friends/${userId}`, { method: 'DELETE' }),
 
   listWeeks: () => request<Week[]>(`${API_BASE}/weeks`),
   getWeek: (idOrNumber: string | number) => request<WeekDetail>(`${API_BASE}/weeks/${idOrNumber}`),
@@ -518,6 +593,7 @@ export const api = {
   getReadingText: (id: string) => request<ReadingText>(`${API_BASE}/reading-texts/${id}`),
   createReadingText: (data: {
     title: string; content: string; level?: string; weekId?: string | null;
+    generateAudio?: boolean;
     questions?: { type: ReadingQuestionType; prompt: string; options?: string[] | null; correctAnswer?: string | null }[]
   }) =>
     request<ReadingText>(`${API_BASE}/reading-texts`, {
@@ -526,9 +602,31 @@ export const api = {
         title: data.title, content: data.content,
         level: data.level ?? null,
         weekId: data.weekId ?? null,
+        generateAudio: data.generateAudio ?? true,
         questions: data.questions ?? null,
       }),
     }),
+  regeneratePassageAudio: (id: string) =>
+    request<ReadingText>(`${API_BASE}/reading-texts/${id}/audio/generate`, { method: 'POST' }),
+  deletePassageAudio: (id: string) =>
+    request<void>(`${API_BASE}/reading-texts/${id}/audio`, { method: 'DELETE' }),
+  uploadPassageAudio: async (id: string, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    const { data: sessionData } = await supabase.auth.getSession()
+    const token = sessionData.session?.access_token
+    const res = await fetch(`${API_BASE}/reading-texts/${id}/audio`, {
+      method: 'POST',
+      body: form,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!res.ok) {
+      let msg = res.statusText || `HTTP ${res.status}`
+      try { const body = await res.text(); if (body) { try { const j = JSON.parse(body); msg = j.error ?? msg } catch { msg = body } } } catch {}
+      throw new ApiError(msg, res.status)
+    }
+    return res.json() as Promise<ReadingText>
+  },
   generateQuestions: (content: string, level?: string, count: number = 4) =>
     request<{ questions: ReadingTextQuestion[] }>(`${API_BASE}/reading-texts/generate-questions`, {
       method: 'POST',

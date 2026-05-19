@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, type ReadingText, type ReadingTextQuestion, type ReadingQuestionType, type Week } from '../api'
 
 interface Props {
@@ -43,6 +43,10 @@ export default function CreateTextSheet({ defaultWeekId, onClose, onCreated }: P
   const [suggesting, setSuggesting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const [generateAudio, setGenerateAudio] = useState(true)
+  const [audioFile, setAudioFile] = useState<File | null>(null)
+  const audioInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -94,11 +98,12 @@ export default function CreateTextSheet({ defaultWeekId, onClose, onCreated }: P
     if (!title.trim() || !content.trim()) { setError('Title and text are required'); return }
     setSaving(true); setError(null)
     try {
-      const t = await api.createReadingText({
+      let t = await api.createReadingText({
         title: title.trim(),
         content,
         level,
         weekId: weekId || null,
+        generateAudio: audioFile ? false : generateAudio,
         questions: questions
           .filter(q => q.prompt.trim().length > 0)
           .map(q => ({
@@ -110,6 +115,9 @@ export default function CreateTextSheet({ defaultWeekId, onClose, onCreated }: P
             correctAnswer: q.correctAnswer.trim() || null,
           })),
       })
+      if (audioFile) {
+        t = await api.uploadPassageAudio(t.id, audioFile)
+      }
       onCreated(t)
     } catch (e: any) {
       setError(e.message)
@@ -172,6 +180,35 @@ export default function CreateTextSheet({ defaultWeekId, onClose, onCreated }: P
                 <option value="">— No week —</option>
                 {weeks.map(w => <option key={w.id} value={w.id}>Woche {w.number}: {w.title}</option>)}
               </select>
+
+              <span className="card-label">Audio</span>
+              <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={generateAudio && !audioFile}
+                  disabled={audioFile !== null}
+                  onChange={e => setGenerateAudio(e.target.checked)}
+                />
+                <span>Generate audio with TTS (German)</span>
+              </label>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  ref={audioInputRef}
+                  type="file"
+                  accept="audio/mpeg,audio/mp3,audio/wav"
+                  onChange={e => setAudioFile(e.target.files?.[0] ?? null)}
+                />
+                {audioFile && (
+                  <button
+                    type="button"
+                    onClick={() => { setAudioFile(null); if (audioInputRef.current) audioInputRef.current.value = '' }}
+                    className="deck-btn"
+                  >
+                    Clear file
+                  </button>
+                )}
+              </div>
+              <p className="hint">Upload an .mp3/.wav (≤5MB) to override TTS, or leave empty to generate.</p>
 
               {error && <p style={{ color: 'var(--danger)', fontSize: '13px', margin: 0 }}>{error}</p>}
 

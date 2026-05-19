@@ -11,6 +11,9 @@ public record ReadingTextResponse(
     string? CreatedByName,
     bool IsOwner,
     DateTime CreatedAt,
+    string? AudioUrl,
+    int? AudioDurationSec,
+    string? AudioVoice,
     List<ReadingTextQuestionResponse> Questions
 );
 

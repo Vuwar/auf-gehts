@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { api, type Dashboard as DashboardData } from '../api'
+import { Link, useNavigate } from 'react-router-dom'
+import { api, type Dashboard as DashboardData, type Week } from '../api'
 import { useAuth } from '../auth'
 import ErrorView from './ErrorView'
 
 export default function Dashboard() {
   const { user, profile } = useAuth()
+  const [weeks, setWeeks] = useState<Week[] | null>(null)
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<unknown>(null)
@@ -16,18 +17,29 @@ export default function Dashboard() {
   const load = () => {
     setLoading(true)
     setError(null)
-    api.getDashboard()
-      .then(setData)
+    api.listWeeks()
+      .then(async ws => {
+        setWeeks(ws)
+        const current = ws.find(w => w.completedCount < w.setCount) ?? ws[ws.length - 1]
+        if (!current) {
+          setData({ friends: [] })
+          return
+        }
+        const dash = await api.getDashboard(current.id)
+        setData(dash)
+      })
       .catch(e => setError(e))
       .finally(() => setLoading(false))
   }
 
   if (loading) return <div className="deck"><p className="empty-state">Loading...</p></div>
   if (error) return <div className="deck"><ErrorView error={error} onRetry={load} /></div>
-  if (!data) return null
+  if (!data || !weeks) return null
 
-  const currentWeek = data.weeks.find(w => w.completedCount < w.setCount) ?? data.weeks[data.weeks.length - 1]
+  const currentWeek = weeks.find(w => w.completedCount < w.setCount) ?? weeks[weeks.length - 1]
   const greeting = profile?.displayName || user?.email
+  const currentStreak = profile?.currentStreak ?? 0
+  const longestStreak = profile?.longestStreak ?? 0
 
   return (
     <div className="deck">
@@ -41,8 +53,8 @@ export default function Dashboard() {
       <div className="streak-hero">
         <span className="streak-hero-icon">🔥</span>
         <div className="streak-hero-text">
-          <strong>{data.currentStreak} day{data.currentStreak === 1 ? '' : 's'}</strong>
-          <span className="hint">Current streak · longest {data.longestStreak}</span>
+          <strong>{currentStreak} day{currentStreak === 1 ? '' : 's'}</strong>
+          <span className="hint">Current streak · longest {longestStreak}</span>
         </div>
       </div>
 
@@ -58,26 +70,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="stats-grid">
-        <div className="stat-card">
-          <span className="stat-label">My Vocabulary</span>
-          <span className="stat-value">{data.stats.vocabCount}</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Active sets</span>
-          <span className="stat-value">{data.stats.activeSetCount}</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Completed sets</span>
-          <span className="stat-value">{data.stats.completedSetCount}</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Added this week</span>
-          <span className="stat-value">{data.stats.wordsAddedThisWeek}</span>
-        </div>
-      </div>
-
-      {data.friends.length > 0 && (
+      {data.friends.length > 0 ? (
         <>
           <h2 className="section-title">Friends</h2>
           <ul className="friend-list">
@@ -85,9 +78,11 @@ export default function Dashboard() {
               const pct = f.currentWeekTotal > 0 ? Math.round((f.currentWeekCompleted / f.currentWeekTotal) * 100) : 0
               return (
                 <li key={f.userId} className="friend-row">
-                  <span className="user-avatar">{f.displayName[0]?.toUpperCase()}</span>
+                  <Link to={`/profile/${f.userId}`} className="user-avatar" aria-label={`Open ${f.displayName}'s profile`}>
+                    {f.displayName[0]?.toUpperCase()}
+                  </Link>
                   <div className="friend-text">
-                    <strong>{f.displayName}</strong>
+                    <Link to={`/profile/${f.userId}`}><strong>{f.displayName}</strong></Link>
                     {f.currentWeekNumber !== null && (
                       <span className="hint">Woche {f.currentWeekNumber}: {f.currentWeekCompleted}/{f.currentWeekTotal} sets</span>
                     )}
@@ -103,6 +98,14 @@ export default function Dashboard() {
             })}
           </ul>
         </>
+      ) : (
+        <div className="homework-card">
+          <span className="card-label">Friends</span>
+          <p className="hint" style={{ margin: '4px 0' }}>No friends yet. Find people on your profile to compare progress.</p>
+          <button onClick={() => nav('/profile')} className="deck-btn" style={{ marginTop: '8px' }}>
+            Go to profile →
+          </button>
+        </div>
       )}
 
       <h2 className="section-title">Quick actions</h2>

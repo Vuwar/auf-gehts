@@ -7,6 +7,7 @@ using Api.Middleware;
 using Api.Models;
 using Api.Repositories;
 using Api.Services;
+using Api.Services.Audio;
 using Api.Services.Logging;
 using Api.Utils;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -88,6 +89,7 @@ builder.Services.AddScoped<IWeekRepository, WeekRepository>();
 builder.Services.AddScoped<IWordSetRepository, WordSetRepository>();
 builder.Services.AddScoped<IWordRepository, WordRepository>();
 builder.Services.AddScoped<IProgressRepository, ProgressRepository>();
+builder.Services.AddScoped<IFriendshipRepository, FriendshipRepository>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<UserService>();
@@ -98,7 +100,12 @@ builder.Services.AddScoped<VocabService>();
 builder.Services.AddScoped<ProgressService>();
 builder.Services.AddScoped<StatsService>();
 builder.Services.AddScoped<DashboardService>();
+builder.Services.AddScoped<FriendshipService>();
+builder.Services.AddScoped<UserProfileService>();
 builder.Services.AddScoped<DictionaryService>();
+builder.Services.Configure<AzureSpeechOptions>(builder.Configuration.GetSection("Azure:Speech"));
+builder.Services.AddSingleton<ITtsService, AzureTtsService>();
+builder.Services.AddSingleton<IAudioStorage, SupabaseAudioStorage>();
 builder.Services.AddScoped<AiService>();
 builder.Services.AddScoped<ReadingTextService>();
 

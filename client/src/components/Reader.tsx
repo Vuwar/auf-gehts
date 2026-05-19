@@ -76,6 +76,7 @@ export default function Reader() {
                   </span>
                   <strong>{t.title}</strong>
                   {t.level && <span className="starter-level">{t.level}</span>}
+                  {t.audioUrl && <span className="deck-item-count" aria-label="Has audio">🎧</span>}
                   {t.weekNumber !== null && <span className="deck-item-count">· Woche {t.weekNumber}</span>}
                   {t.questions.length > 0 && <span className="deck-item-count">· {t.questions.length} questions</span>}
                 </div>

@@ -11,6 +11,11 @@ public class ReadingText
     public Guid? CreatedByUserId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    public string? AudioUrl { get; set; }
+    public string? AudioPath { get; set; }
+    public int? AudioDurationSec { get; set; }
+    public string? AudioVoice { get; set; }
+
     public List<ReadingTextQuestion> Questions { get; set; } = [];
 }
 

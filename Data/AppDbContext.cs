@@ -16,6 +16,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ReadingText> ReadingTexts => Set<ReadingText>();
     public DbSet<ReadingTextQuestion> ReadingTextQuestions => Set<ReadingTextQuestion>();
     public DbSet<EventLog> EventLogs => Set<EventLog>();
+    public DbSet<Friendship> Friendships => Set<Friendship>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -179,6 +180,25 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(e => e.PayloadJson).IsRequired();
             entity.Property(e => e.CachedAt).HasDefaultValueSql("now()");
             entity.HasIndex(e => e.Word).IsUnique();
+        });
+
+        modelBuilder.Entity<Friendship>(entity =>
+        {
+            entity.ToTable("friendships");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.HasIndex(e => new { e.RequesterId, e.AddresseeId }).IsUnique();
+            entity.HasIndex(e => new { e.AddresseeId, e.Status });
+            entity.HasIndex(e => new { e.RequesterId, e.Status });
+            entity.HasOne(e => e.Requester)
+                  .WithMany()
+                  .HasForeignKey(e => e.RequesterId)
+                  .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Addressee)
+                  .WithMany()
+                  .HasForeignKey(e => e.AddresseeId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }
