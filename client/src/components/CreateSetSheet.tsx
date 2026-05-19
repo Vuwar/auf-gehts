@@ -88,10 +88,15 @@ export default function CreateSetSheet({ onClose, onCreated }: Props) {
               <option value="C1">C1</option><option value="C2">C2</option>
             </select>
 
-            <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} />
-              <span>Public (visible to everyone)</span>
-            </label>
+            <button type="button" onClick={() => setIsPublic(!isPublic)} className="visibility-toggle">
+              <div className="visibility-toggle-text">
+                <span className="visibility-toggle-title">{isPublic ? 'Public' : 'Private'}</span>
+                <span className="visibility-toggle-sub">{isPublic ? 'Visible to everyone' : 'Only visible to you'}</span>
+              </div>
+              <span className={`visibility-switch ${isPublic ? 'on' : ''}`}>
+                <span className="visibility-switch-knob" />
+              </span>
+            </button>
 
             {isAdmin && (
               <>
@@ -100,10 +105,15 @@ export default function CreateSetSheet({ onClose, onCreated }: Props) {
                   <option value="">Choose a week</option>
                   {weeks.map(w => <option key={w.id} value={w.id}>Woche {w.number}: {w.title}</option>)}
                 </select>
-                <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <input type="checkbox" checked={isOfficial} onChange={e => setIsOfficial(e.target.checked)} />
-                  <span>Make official</span>
-                </label>
+                <button type="button" onClick={() => setIsOfficial(!isOfficial)} className="visibility-toggle">
+                  <div className="visibility-toggle-text">
+                    <span className="visibility-toggle-title">Official set</span>
+                    <span className="visibility-toggle-sub">Shows in Abenteuer week page</span>
+                  </div>
+                  <span className={`visibility-switch ${isOfficial ? 'on' : ''}`}>
+                    <span className="visibility-switch-knob" />
+                  </span>
+                </button>
               </>
             )}
 

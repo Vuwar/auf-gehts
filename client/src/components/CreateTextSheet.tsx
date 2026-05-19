@@ -182,15 +182,20 @@ export default function CreateTextSheet({ defaultWeekId, onClose, onCreated }: P
               </select>
 
               <span className="card-label">Audio</span>
-              <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <input
-                  type="checkbox"
-                  checked={generateAudio && !audioFile}
-                  disabled={audioFile !== null}
-                  onChange={e => setGenerateAudio(e.target.checked)}
-                />
-                <span>Generate audio with TTS (German)</span>
-              </label>
+              <button
+                type="button"
+                onClick={() => { if (!audioFile) setGenerateAudio(!generateAudio) }}
+                disabled={audioFile !== null}
+                className="visibility-toggle"
+              >
+                <div className="visibility-toggle-text">
+                  <span className="visibility-toggle-title">Generate audio with TTS</span>
+                  <span className="visibility-toggle-sub">German voice. Disabled if you upload your own audio file.</span>
+                </div>
+                <span className={`visibility-switch ${(generateAudio && !audioFile) ? 'on' : ''}`}>
+                  <span className="visibility-switch-knob" />
+                </span>
+              </button>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <input
                   ref={audioInputRef}

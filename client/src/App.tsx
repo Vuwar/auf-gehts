@@ -38,8 +38,10 @@ function TopBar() {
         <NavLink to="/library" className={({ isActive }) => `top-bar-link ${isActive ? 'active' : ''}`}>Library</NavLink>
         <NavLink to="/reader" className={({ isActive }) => `top-bar-link ${isActive ? 'active' : ''}`}>Reader</NavLink>
       </nav>
-      <RequestsBell />
-      <UserMenu />
+      <div className="top-bar-right">
+        <RequestsBell />
+        <UserMenu />
+      </div>
     </header>
   )
 }

@@ -104,10 +104,14 @@ export default function AdminLogs() {
           <h1>Logs & metrics</h1>
           <span className="deck-progress">Live system observability</span>
         </div>
-        <label style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-          <input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)} />
-          <span>Auto-refresh</span>
-        </label>
+        <button type="button" onClick={() => setAuto(!auto)} className="visibility-toggle visibility-toggle-compact">
+          <div className="visibility-toggle-text">
+            <span className="visibility-toggle-title">Auto-refresh</span>
+          </div>
+          <span className={`visibility-switch ${auto ? 'on' : ''}`}>
+            <span className="visibility-switch-knob" />
+          </span>
+        </button>
       </div>
 
       <div className="diag-section">

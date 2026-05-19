@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { api, type ReadingText, type ReadingTextQuestion } from '../api'
 import { useAuth } from '../auth'
 import WordLookupPopup from './WordLookupPopup'
+import AudioPlayer from './AudioPlayer'
 
 type PassageMode = 'listen' | 'both' | 'read'
 const PASSAGE_MODE_KEY = 'passageMode'
@@ -187,9 +188,7 @@ export default function ReaderDetail() {
 
       {showAudio && (
         <div className="passage-audio">
-          <audio
-            controls
-            preload="metadata"
+          <AudioPlayer
             src={text.audioUrl!}
             onEnded={() => setAudioCompleted(true)}
           />
