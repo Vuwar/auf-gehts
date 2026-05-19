@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api, type ReadingText, type ReadingTextQuestion, type ReadingQuestionType, type Week } from '../api'
+import FilePicker from './FilePicker'
 
 interface Props {
   defaultWeekId?: string
@@ -46,7 +47,6 @@ export default function CreateTextSheet({ defaultWeekId, onClose, onCreated }: P
 
   const [generateAudio, setGenerateAudio] = useState(true)
   const [audioFile, setAudioFile] = useState<File | null>(null)
-  const audioInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -196,24 +196,13 @@ export default function CreateTextSheet({ defaultWeekId, onClose, onCreated }: P
                   <span className="visibility-switch-knob" />
                 </span>
               </button>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <input
-                  ref={audioInputRef}
-                  type="file"
-                  accept="audio/mpeg,audio/mp3,audio/wav"
-                  onChange={e => setAudioFile(e.target.files?.[0] ?? null)}
-                />
-                {audioFile && (
-                  <button
-                    type="button"
-                    onClick={() => { setAudioFile(null); if (audioInputRef.current) audioInputRef.current.value = '' }}
-                    className="deck-btn"
-                  >
-                    Clear file
-                  </button>
-                )}
-              </div>
-              <p className="hint">Upload an .mp3/.wav (≤5MB) to override TTS, or leave empty to generate.</p>
+              <FilePicker
+                accept="audio/mpeg,audio/mp3,audio/wav"
+                file={audioFile}
+                onChange={setAudioFile}
+                label="Upload audio file"
+                hint=".mp3 or .wav, max 5MB — overrides TTS"
+              />
 
               {error && <p style={{ color: 'var(--danger)', fontSize: '13px', margin: 0 }}>{error}</p>}
 

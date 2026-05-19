@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api, type ReadingText, type ReadingTextQuestion } from '../api'
 import { useAuth } from '../auth'
 import WordLookupPopup from './WordLookupPopup'
 import AudioPlayer from './AudioPlayer'
+import FilePicker from './FilePicker'
 
 type PassageMode = 'listen' | 'both' | 'read'
 const PASSAGE_MODE_KEY = 'passageMode'
@@ -38,7 +39,6 @@ export default function ReaderDetail() {
   const [audioCompleted, setAudioCompleted] = useState(false)
   const [revealText, setRevealText] = useState(false)
   const [audioBusy, setAudioBusy] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!id) return
@@ -102,7 +102,6 @@ export default function ReaderDetail() {
       alert(e.message)
     } finally {
       setAudioBusy(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
@@ -228,17 +227,17 @@ export default function ReaderDetail() {
             <button onClick={regenerateAudio} disabled={audioBusy} className="deck-btn">
               {audioBusy ? 'Working…' : (text.audioUrl ? 'Regenerate TTS' : 'Generate TTS')}
             </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="audio/mpeg,audio/mp3,audio/wav"
-              onChange={e => { const f = e.target.files?.[0]; if (f) onUpload(f) }}
-              disabled={audioBusy}
-            />
             {text.audioUrl && (
               <button onClick={removeAudio} disabled={audioBusy} className="deck-btn danger">Remove audio</button>
             )}
           </div>
+          <FilePicker
+            accept="audio/mpeg,audio/mp3,audio/wav"
+            disabled={audioBusy}
+            onChange={f => { if (f) onUpload(f) }}
+            label="Upload audio file"
+            hint=".mp3 or .wav — replaces current audio"
+          />
           {text.audioVoice && <p className="hint">Source: {text.audioVoice}</p>}
         </div>
       )}
