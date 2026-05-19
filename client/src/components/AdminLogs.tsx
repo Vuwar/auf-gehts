@@ -4,13 +4,17 @@ import { useAuth } from '../auth'
 import { Navigate } from 'react-router-dom'
 
 const LEVELS: (LogLevel | '')[] = ['', 'Info', 'Warning', 'Error', 'Critical']
-const REFRESH_MS = 5000
+// 15s (was 5s). Each refresh fires 2 expensive aggregate queries on event_logs; a
+// 5s cadence + 5-15s query latency caused refreshes to pile up on the connection pool
+// and starve the rest of the app.
+const REFRESH_MS = 15000
 
 export default function AdminLogs() {
   const { profile } = useAuth()
   const [stats, setStats] = useState<LogsStats | null>(null)
   const [diag, setDiag] = useState<DiagnosticReport | null>(null)
   const [diagLoading, setDiagLoading] = useState(false)
+  const [downloading, setDownloading] = useState(false)
   const [logs, setLogs] = useState<LogsPage | null>(null)
   const [auto, setAuto] = useState(true)
   const [loading, setLoading] = useState(false)
@@ -54,11 +58,21 @@ export default function AdminLogs() {
     finally { setDiagLoading(false) }
   }
 
+  const downloadDiagnostics = async () => {
+    setDownloading(true)
+    try { await api.adminDownloadDiagnostics(windowMinutes) }
+    catch (e) { alert(`Download failed: ${e instanceof Error ? e.message : String(e)}`) }
+    finally { setDownloading(false) }
+  }
+
   useEffect(() => { runDiagnose() }, [windowMinutes])
 
   useEffect(() => {
     if (!auto) return
-    const t = setInterval(refresh, REFRESH_MS)
+    // Pause polling when the tab is hidden. Without this, a backgrounded admin tab
+    // keeps firing 2-3 heavy aggregate queries every interval, holding pool connections
+    // that the foreground app needs.
+    const t = setInterval(() => { if (!document.hidden) refresh() }, REFRESH_MS)
     return () => clearInterval(t)
   }, [auto, windowMinutes, level, eventType, endpoint, traceId, minDurationMs, page])
 
@@ -99,9 +113,14 @@ export default function AdminLogs() {
       <div className="diag-section">
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '8px' }}>
           <h2 className="section-title" style={{ margin: 0 }}>Diagnostic report</h2>
-          <button onClick={runDiagnose} disabled={diagLoading} className="deck-btn">
-            {diagLoading ? 'Analyzing...' : '↻ Re-run'}
-          </button>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button onClick={downloadDiagnostics} disabled={downloading} className="deck-btn" title="Download full diagnostics snapshot as JSON">
+              {downloading ? 'Preparing...' : '⬇ Download JSON'}
+            </button>
+            <button onClick={runDiagnose} disabled={diagLoading} className="deck-btn">
+              {diagLoading ? 'Analyzing...' : '↻ Re-run'}
+            </button>
+          </div>
         </div>
         {diag && diag.totals && (
           <p className="hint" style={{ marginTop: '4px' }}>

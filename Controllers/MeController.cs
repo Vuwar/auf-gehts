@@ -3,18 +3,21 @@ using Api.DTOs.Responses;
 using Api.Mappings;
 using Api.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.OutputCaching;
 
 namespace Api.Controllers;
 
 [Route("api/me")]
-public class MeController(UserService service) : BaseController
+public class MeController(UserService service, CurrentUserAccessor currentUser) : BaseController
 {
     [HttpGet]
+    [OutputCache(PolicyName = "PerUser")]
     public async Task<ActionResult<UserResponse>> Get()
     {
-        var userId = GetUserId();
-        if (userId is null) return Unauthorized();
-        var user = await service.GetAsync(userId.Value);
+        // Reuse the accessor's cached/IMemoryCache-backed read. The UserSyncMiddleware
+        // has already loaded (and possibly written) the user earlier in the pipeline, so
+        // this avoids the redundant SELECT users we used to do on every /api/me hit.
+        var user = await currentUser.GetAsync();
         return user is null ? NotFound() : Ok(user.ToResponse());
     }
 

@@ -261,6 +261,7 @@ interface ClientSample {
 }
 const sampleBuffer: ClientSample[] = []
 let lastTraceId: string | null = null
+let dashboardInflight: Promise<Dashboard> | null = null
 export function getLastTraceId() { return lastTraceId }
 ;(globalThis as any).__appTraces = sampleBuffer
 
@@ -391,7 +392,16 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 
 export const api = {
   getStats: () => request<Stats>(`${API_BASE}/stats`),
-  getDashboard: () => request<Dashboard>(`${API_BASE}/dashboard`),
+  // Dedupe in-flight dashboard fetches. React StrictMode double-mounts in dev fire the
+  // effect twice; without this each load = 2 network calls = 2× the 7-query fan-out.
+  // Production doesn't double-mount, but coalescing is also useful if two components
+  // happen to request the dashboard simultaneously.
+  getDashboard: () => {
+    if (dashboardInflight) return dashboardInflight
+    dashboardInflight = request<Dashboard>(`${API_BASE}/dashboard`)
+      .finally(() => { dashboardInflight = null })
+    return dashboardInflight
+  },
 
   listWeeks: () => request<Week[]>(`${API_BASE}/weeks`),
   getWeek: (idOrNumber: string | number) => request<WeekDetail>(`${API_BASE}/weeks/${idOrNumber}`),
@@ -540,6 +550,24 @@ export const api = {
     request<LogsStats>(`${API_BASE}/admin/logs/stats?minutes=${minutes}`),
   adminLogsDiagnose: (minutes: number = 60) =>
     request<DiagnosticReport>(`${API_BASE}/admin/logs/diagnose?minutes=${minutes}`),
+  adminDownloadDiagnostics: async (minutes: number = 60) => {
+    const res = await authedFetch(
+      `${API_BASE}/admin/logs/snapshot?minutes=${minutes}&recentLogs=200&recentErrors=50`,
+    )
+    if (!res.ok) throw new ApiError(`Snapshot failed: HTTP ${res.status}`, res.status)
+    const blob = await res.blob()
+    const cd = res.headers.get('content-disposition') ?? ''
+    const m = cd.match(/filename="?([^"]+)"?/i)
+    const filename = m?.[1] ?? `diagnostics-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  },
   adminQueryLogs: (params: LogQueryParams) => {
     const q = new URLSearchParams()
     if (params.level) q.set('level', params.level)

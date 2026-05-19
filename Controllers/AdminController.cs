@@ -5,11 +5,12 @@ using Api.Models;
 using Api.Repositories;
 using Api.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Api.Controllers;
 
 [Route("api/admin")]
-public class AdminController(IUserRepository userRepo, CurrentUserAccessor currentUser) : BaseController
+public class AdminController(IUserRepository userRepo, CurrentUserAccessor currentUser, IMemoryCache cache) : BaseController
 {
     [HttpGet("users")]
     public async Task<ActionResult<List<UserResponse>>> Users()
@@ -30,6 +31,7 @@ public class AdminController(IUserRepository userRepo, CurrentUserAccessor curre
         if (target is null) return NotFound();
         target.Role = role;
         await userRepo.SaveAsync();
+        CurrentUserAccessor.Invalidate(cache, id);
         return Ok(target.ToResponse());
     }
 
@@ -42,6 +44,7 @@ public class AdminController(IUserRepository userRepo, CurrentUserAccessor curre
         var target = await userRepo.GetByIdAsync(id);
         if (target is null) return NotFound();
         await userRepo.DeleteAsync(target);
+        CurrentUserAccessor.Invalidate(cache, id);
         return NoContent();
     }
 }

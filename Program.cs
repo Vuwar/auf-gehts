@@ -68,8 +68,6 @@ builder.Services.AddSingleton<SlowQueryInterceptor>();
 builder.Services.AddScoped<DiagnosticAnalyzer>();
 
 builder.Services.AddHostedService<EventLogWorker>();
-builder.Services.AddHostedService<EventLogWorker>();
-builder.Services.AddHostedService<EventLogWorker>();
 
 builder.Services.AddDbContext<AppDbContext>((sp, options) =>
 {
@@ -210,9 +208,22 @@ app.UseOutputCache();
 
 if (!string.Equals(Environment.GetEnvironmentVariable("SKIP_MIGRATIONS"), "true", StringComparison.OrdinalIgnoreCase))
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    var conn = db.Database.GetDbConnection();
+    // Migrations require a session-mode connection: pg_advisory_lock is session-scoped
+    // and prepared statements (used internally by EF Migrate) break on PgBouncer
+    // transaction-mode (port 6543). Prefer MigrationConnection (port 5432 session pooler);
+    // fall back to DefaultConnection if not configured.
+    var migrationConnString = builder.Configuration.GetConnectionString("MigrationConnection")
+        ?? builder.Configuration.GetConnectionString("DefaultConnection");
+
+    var migrationOptions = new DbContextOptionsBuilder<AppDbContext>()
+        .UseNpgsql(migrationConnString, npg => npg.EnableRetryOnFailure(
+            maxRetryCount: 3,
+            maxRetryDelay: TimeSpan.FromSeconds(2),
+            errorCodesToAdd: null))
+        .Options;
+
+    await using var migrationDb = new AppDbContext(migrationOptions);
+    var conn = migrationDb.Database.GetDbConnection();
     await conn.OpenAsync();
     try
     {
@@ -224,8 +235,8 @@ if (!string.Equals(Environment.GetEnvironmentVariable("SKIP_MIGRATIONS"), "true"
         }
         try
         {
-            await db.Database.MigrateAsync();
-            await SeedData.SeedAsync(db);
+            await migrationDb.Database.MigrateAsync();
+            await SeedData.SeedAsync(migrationDb);
         }
         finally
         {

@@ -7,21 +7,24 @@ namespace Api.Services;
 
 public class DashboardService(IServiceScopeFactory scopeFactory)
 {
+    // Cap fan-out per dashboard request. Sized for the 50-connection pool on the
+    // Supabase transaction pooler (port 6543): 8 == full parallelism for the queries
+    // below, so the semaphore never throttles a single request. The cap remains as
+    // defense-in-depth if the fan-out grows or the pool shrinks.
+    private const int MaxConcurrentScopes = 8;
+
     public async Task<DashboardResponse> GetAsync(Guid userId)
     {
         var weekAgo = DateTime.UtcNow.AddDays(-7);
 
-        // Phase 1: fan out the independent reads in parallel. Each task gets its own
-        // scope (= own DbContext + own connection — EF can't run concurrent ops on a
-        // single context). The connection pool naturally queues anything beyond the
-        // configured Maximum Pool Size; wall-clock per request becomes roughly
-        // max(query) rather than sum(query).
-        var meTask = Scoped(d => d.Users
+        using var gate = new SemaphoreSlim(MaxConcurrentScopes, MaxConcurrentScopes);
+
+        var meTask = Scoped(gate, d => d.Users
             .Where(u => u.Id == userId)
             .Select(u => new { u.CurrentStreak, u.LongestStreak })
             .FirstOrDefaultAsync());
 
-        var vocabChainTask = ScopedAsync(async sp =>
+        var vocabChainTask = ScopedAsync(gate, async sp =>
         {
             var sets = sp.GetRequiredService<WordSetService>();
             var d = sp.GetRequiredService<AppDbContext>();
@@ -33,7 +36,7 @@ public class DashboardService(IServiceScopeFactory scopeFactory)
                 .FirstOrDefaultAsync() ?? new VocabCounts(0, 0);
         });
 
-        var progressCountsTask = Scoped(async d =>
+        var progressCountsTask = Scoped(gate, async d =>
             await d.UserSetProgress
                 .Where(p => p.UserId == userId)
                 .GroupBy(_ => 1)
@@ -42,14 +45,14 @@ public class DashboardService(IServiceScopeFactory scopeFactory)
                     g.Count(p => p.Status == ProgressStatus.Completed)))
                 .FirstOrDefaultAsync() ?? new ProgressCounts(0, 0));
 
-        var weeksTask = Scoped(d => d.Weeks.OrderBy(w => w.Number).ToListAsync());
+        var weeksTask = Scoped(gate, d => d.Weeks.OrderBy(w => w.Number).ToListAsync());
 
-        var setsByWeekTask = Scoped(d => d.WordSets
+        var setsByWeekTask = Scoped(gate, d => d.WordSets
             .Where(s => s.WeekId != null && s.IsOfficial && s.IsPublic)
             .Select(s => new SetWeekRow(s.Id, s.WeekId!.Value))
             .ToListAsync());
 
-        var statusesTask = Scoped(async d =>
+        var statusesTask = Scoped(gate, async d =>
         {
             var rows = await d.UserSetProgress
                 .Where(p => p.UserId == userId)
@@ -58,7 +61,7 @@ public class DashboardService(IServiceScopeFactory scopeFactory)
             return rows.ToDictionary(r => r.WordSetId, r => r.Status);
         });
 
-        var othersTask = Scoped(d => d.Users
+        var othersTask = Scoped(gate, d => d.Users
             .Where(u => u.Id != userId)
             .Select(u => new OtherUserRow(u.Id, u.DisplayName, u.Email, u.CurrentStreak))
             .ToListAsync());
@@ -95,7 +98,7 @@ public class DashboardService(IServiceScopeFactory scopeFactory)
         var friendIds = others.Select(o => o.Id).ToList();
         var friendCompletions = currentWeekSetIds.Count == 0 || friendIds.Count == 0
             ? new Dictionary<Guid, int>()
-            : await Scoped(d => d.UserSetProgress
+            : await Scoped(gate, d => d.UserSetProgress
                 .Where(p => friendIds.Contains(p.UserId)
                          && currentWeekSetIds.Contains(p.WordSetId)
                          && p.Status == ProgressStatus.Completed)
@@ -122,17 +125,27 @@ public class DashboardService(IServiceScopeFactory scopeFactory)
         );
     }
 
-    private async Task<T> Scoped<T>(Func<AppDbContext, Task<T>> work)
+    private async Task<T> Scoped<T>(SemaphoreSlim gate, Func<AppDbContext, Task<T>> work)
     {
-        using var scope = scopeFactory.CreateScope();
-        var d = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        return await work(d);
+        await gate.WaitAsync();
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var d = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            return await work(d);
+        }
+        finally { gate.Release(); }
     }
 
-    private async Task<T> ScopedAsync<T>(Func<IServiceProvider, Task<T>> work)
+    private async Task<T> ScopedAsync<T>(SemaphoreSlim gate, Func<IServiceProvider, Task<T>> work)
     {
-        using var scope = scopeFactory.CreateScope();
-        return await work(scope.ServiceProvider);
+        await gate.WaitAsync();
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            return await work(scope.ServiceProvider);
+        }
+        finally { gate.Release(); }
     }
 
     private record VocabCounts(int Total, int ThisWeek);

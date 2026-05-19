@@ -2,10 +2,11 @@ using Api.DTOs.Requests;
 using Api.Models;
 using Api.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Api.Services;
 
-public class UserService(IUserRepository repo)
+public class UserService(IUserRepository repo, IMemoryCache cache)
 {
     public async Task<User> EnsureExistsAsync(Guid id, string email)
     {
@@ -47,6 +48,7 @@ public class UserService(IUserRepository repo)
             user.AnthropicApiKey = string.IsNullOrWhiteSpace(req.AnthropicApiKey) ? null : req.AnthropicApiKey;
         }
         await repo.SaveAsync();
+        CurrentUserAccessor.Invalidate(cache, id);
         return user;
     }
 }

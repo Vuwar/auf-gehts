@@ -158,12 +158,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(e => e.Id).ValueGeneratedOnAdd();
             entity.Property(e => e.Timestamp).HasDefaultValueSql("now()");
             entity.Property(e => e.EventType).IsRequired();
-            entity.HasIndex(e => e.Timestamp);
-            entity.HasIndex(e => e.Level);
-            entity.HasIndex(e => e.EventType);
+            entity.HasIndex(e => e.Timestamp).IsDescending();
             entity.HasIndex(e => e.TraceId);
             entity.HasIndex(e => e.UserId);
-            entity.HasIndex(e => e.Endpoint);
+            // Compound indexes serve the admin-logs hot paths:
+            //   (Level, Timestamp DESC)     — recent errors/warnings filter + order
+            //   (EventType, Timestamp DESC) — request.slow / db.slow_query lookups
+            //   (Endpoint, Timestamp DESC)  — per-endpoint stats aggregations
+            entity.HasIndex(e => new { e.Level, e.Timestamp }).IsDescending(false, true);
+            entity.HasIndex(e => new { e.EventType, e.Timestamp }).IsDescending(false, true);
+            entity.HasIndex(e => new { e.Endpoint, e.Timestamp }).IsDescending(false, true);
         });
 
         modelBuilder.Entity<WordCache>(entity =>
