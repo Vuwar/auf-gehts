@@ -56,7 +56,8 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
-      "PowerShell(Set-Location C:\\\\Users\\\\vuqar.karimli\\\\auf-gehts\\\\client; npx tsc --noEmit -p tsconfig.app.json; Write-Output \"exit=$LASTEXITCODE\")"
+      "PowerShell(Set-Location C:\\\\Users\\\\vuqar.karimli\\\\auf-gehts\\\\client; npx tsc --noEmit -p tsconfig.app.json; Write-Output \"exit=$LASTEXITCODE\")",
+      "Bash(git commit --amend -m ' *)"
     ]
   },
   "enableAllProjectMcpServers": true,
