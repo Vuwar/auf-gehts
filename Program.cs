@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.IO.Compression;
+using System.Net;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using Api.Data;
@@ -70,10 +71,15 @@ builder.Services.AddScoped<DiagnosticAnalyzer>();
 
 builder.Services.AddHostedService<EventLogWorker>();
 
+var defaultConnectionString = ResolvePostgresConnectionString(
+    builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? builder.Configuration["DATABASE_URL"],
+    "DefaultConnection");
+
 builder.Services.AddDbContext<AppDbContext>((sp, options) =>
 {
     options.UseNpgsql(
-        builder.Configuration.GetConnectionString("DefaultConnection"),
+        defaultConnectionString,
         // Auto-retry transient Postgres / pgbouncer hiccups (e.g. "Exception while reading
         // from stream" when the pooler drops an idle connection). Safe because no code path
         // uses explicit BeginTransaction; if you add one, wrap it in CreateExecutionStrategy.
@@ -222,8 +228,11 @@ if (!string.Equals(Environment.GetEnvironmentVariable("SKIP_MIGRATIONS"), "true"
     // and prepared statements (used internally by EF Migrate) break on PgBouncer
     // transaction-mode (port 6543). Prefer MigrationConnection (port 5432 session pooler);
     // fall back to DefaultConnection if not configured.
-    var migrationConnString = builder.Configuration.GetConnectionString("MigrationConnection")
-        ?? builder.Configuration.GetConnectionString("DefaultConnection");
+    var migrationConnString = ResolvePostgresConnectionString(
+        builder.Configuration.GetConnectionString("MigrationConnection")
+        ?? builder.Configuration["MIGRATION_DATABASE_URL"]
+        ?? defaultConnectionString,
+        "MigrationConnection");
 
     var migrationOptions = new DbContextOptionsBuilder<AppDbContext>()
         .UseNpgsql(migrationConnString, npg => npg.EnableRetryOnFailure(
@@ -269,3 +278,55 @@ app.UseRateLimiter();
 app.MapControllers();
 
 app.Run();
+
+static string ResolvePostgresConnectionString(string? configured, string name)
+{
+    if (string.IsNullOrWhiteSpace(configured))
+    {
+        throw new InvalidOperationException(
+            $"{name} missing. Set ConnectionStrings__DefaultConnection or DATABASE_URL.");
+    }
+
+    if (!Uri.TryCreate(configured, UriKind.Absolute, out var uri) ||
+        (uri.Scheme != "postgres" && uri.Scheme != "postgresql"))
+    {
+        return configured;
+    }
+
+    var credentials = uri.UserInfo.Split(':', 2);
+    var user = credentials.Length > 0 ? WebUtility.UrlDecode(credentials[0]) : "";
+    var password = credentials.Length > 1 ? WebUtility.UrlDecode(credentials[1]) : "";
+    var database = uri.AbsolutePath.TrimStart('/');
+    var query = ParseConnectionQuery(uri.Query);
+    var sslMode = query.TryGetValue("sslmode", out var configuredSslMode)
+        ? configuredSslMode
+        : "Prefer";
+
+    return string.Join(';', new[]
+    {
+        $"Host={uri.Host}",
+        $"Port={(uri.Port > 0 ? uri.Port : 5432)}",
+        $"Database={WebUtility.UrlDecode(database)}",
+        $"Username={user}",
+        $"Password={password}",
+        $"SSL Mode={sslMode}",
+        "Trust Server Certificate=true",
+        "Pooling=true"
+    });
+}
+
+static Dictionary<string, string> ParseConnectionQuery(string query)
+{
+    var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    if (string.IsNullOrWhiteSpace(query)) return values;
+
+    foreach (var part in query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+    {
+        var pair = part.Split('=', 2);
+        var key = WebUtility.UrlDecode(pair[0]);
+        if (string.IsNullOrWhiteSpace(key)) continue;
+        values[key] = pair.Length > 1 ? WebUtility.UrlDecode(pair[1]) : "";
+    }
+
+    return values;
+}
