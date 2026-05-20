@@ -12,6 +12,8 @@ import {
 } from '../api'
 import { useAuth } from '../auth'
 import EditUserSheet from './EditUserSheet'
+import ConfirmationDialog from './ConfirmationDialog'
+import { ListSkeleton, PageSkeleton, StatsSkeleton } from './Skeletons'
 
 const ROLE_BADGE: Record<string, { icon: string; color: string }> = {
   Admin: { icon: '👑', color: 'var(--accent)' },
@@ -38,6 +40,7 @@ function OwnProfileView() {
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [showKeySheet, setShowKeySheet] = useState(false)
   const [keySaving, setKeySaving] = useState(false)
+  const [confirmClearKey, setConfirmClearKey] = useState(false)
 
   const [users, setUsers] = useState<UserProfile[]>([])
   const [usersLoading, setUsersLoading] = useState(false)
@@ -80,9 +83,9 @@ function OwnProfileView() {
   }
 
   const clearKey = async () => {
-    if (!confirm('Remove your Groq API key?')) return
     const updated = await api.updateMe(undefined, '')
     setProfile(updated)
+    setConfirmClearKey(false)
   }
 
   const saveKey = async () => {
@@ -115,7 +118,7 @@ function OwnProfileView() {
     }
   }
 
-  if (!profile) return <p className="empty-state">Loading...</p>
+  if (!profile) return <PageSkeleton page="profile" />
 
   const initial = (profile.displayName || profile.email)[0]?.toUpperCase() ?? '?'
 
@@ -143,7 +146,7 @@ function OwnProfileView() {
         </button>
         {statsOpen && (
           <div className="collapsible-body">
-            {statsLoading && <p className="hint">Loading stats…</p>}
+            {statsLoading && <StatsSkeleton />}
             {statsError && <p className="hint" style={{ color: 'var(--danger, #c33)' }}>{statsError}</p>}
             {stats && (
               <div className="stats-grid">
@@ -183,7 +186,7 @@ function OwnProfileView() {
         {profile.hasAnthropicKey ? (
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <span style={{ color: 'var(--accent)' }}>✓ Key linked</span>
-            <button type="button" onClick={clearKey} className="deck-btn danger">Remove</button>
+            <button type="button" onClick={() => setConfirmClearKey(true)} className="deck-btn danger">Remove</button>
           </div>
         ) : (
           <button type="button" onClick={() => setShowKeySheet(true)} className="deck-btn" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -204,7 +207,7 @@ function OwnProfileView() {
         <>
           <h2 className="section-title">Admin · Users</h2>
           {usersLoading ? (
-            <p className="hint">Loading users...</p>
+            <ListSkeleton rows={4} withAvatar />
           ) : (
             <ul className="user-list">
               {users.map(u => {
@@ -266,6 +269,14 @@ function OwnProfileView() {
           </div>
         </div>
       )}
+      <ConfirmationDialog
+        open={confirmClearKey}
+        title="Remove API key?"
+        message="Your saved Groq API key will be removed from this account."
+        confirmLabel="Remove key"
+        onCancel={() => setConfirmClearKey(false)}
+        onConfirm={clearKey}
+      />
     </div>
   )
 }
@@ -273,6 +284,7 @@ function OwnProfileView() {
 function FriendsSection() {
   const [friends, setFriends] = useState<FriendSummary[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [confirmFriend, setConfirmFriend] = useState<FriendSummary | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -284,12 +296,13 @@ function FriendsSection() {
 
   useEffect(() => { load() }, [load])
 
-  const unfriend = async (id: string, name: string) => {
-    if (!confirm(`Remove ${name} from your friends?`)) return
+  const unfriend = async () => {
+    if (!confirmFriend) return
     const prev = friends ?? []
-    setFriends(prev.filter(f => f.id !== id))
+    setFriends(prev.filter(f => f.id !== confirmFriend.id))
     try {
-      await api.unfriend(id)
+      await api.unfriend(confirmFriend.id)
+      setConfirmFriend(null)
     } catch (e) {
       setFriends(prev)
       alert(e instanceof Error ? e.message : 'Failed to unfriend')
@@ -300,7 +313,7 @@ function FriendsSection() {
     <>
       <h2 className="section-title">Friends</h2>
       {error && <p className="hint" style={{ color: 'var(--danger, #c33)' }}>{error}</p>}
-      {!friends && !error && <p className="hint">Loading friends…</p>}
+      {!friends && !error && <ListSkeleton rows={3} withAvatar />}
       {friends && friends.length === 0 && <p className="hint">No friends yet. Find people below.</p>}
       {friends && friends.length > 0 && (
         <ul className="friend-list">
@@ -313,11 +326,19 @@ function FriendsSection() {
                 <Link to={`/profile/${f.id}`}><strong>{f.displayName}</strong></Link>
                 {f.currentStreak > 0 && <span className="hint">🔥 {f.currentStreak} day streak</span>}
               </div>
-              <button onClick={() => unfriend(f.id, f.displayName)} className="deck-btn">Unfriend</button>
+              <button onClick={() => setConfirmFriend(f)} className="deck-btn">Unfriend</button>
             </li>
           ))}
         </ul>
       )}
+      <ConfirmationDialog
+        open={!!confirmFriend}
+        title="Unfriend?"
+        message={`Remove ${confirmFriend?.displayName ?? 'this person'} from your friends?`}
+        confirmLabel="Unfriend"
+        onCancel={() => setConfirmFriend(null)}
+        onConfirm={unfriend}
+      />
     </>
   )
 }
@@ -379,7 +400,7 @@ function FindPeopleSection({ ownId }: { ownId: string }) {
         placeholder="Search by name…"
         aria-label="Search users"
       />
-      {loading && <p className="hint">Searching…</p>}
+      {loading && <ListSkeleton rows={3} withAvatar />}
       {error && <p className="hint" style={{ color: 'var(--danger, #c33)' }}>{error}</p>}
       {page && page.items.length === 0 && !loading && (
         <p className="hint">No users found.</p>
@@ -419,6 +440,7 @@ function OtherProfileView({ userId }: { userId: string }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [confirmUnfriend, setConfirmUnfriend] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -439,7 +461,7 @@ function OtherProfileView({ userId }: { userId: string }) {
     [profile?.displayName],
   )
 
-  if (loading) return <div className="deck"><p className="empty-state">Loading...</p></div>
+  if (loading) return <PageSkeleton page="profile" />
   if (error) return <div className="deck"><p className="empty-state">{error}</p></div>
   if (!profile) return <div className="deck"><p className="empty-state">Not found.</p></div>
 
@@ -486,11 +508,11 @@ function OtherProfileView({ userId }: { userId: string }) {
   }
 
   const unfriend = async () => {
-    if (!confirm(`Remove ${profile.displayName} from your friends?`)) return
     setBusy(true)
     try {
       await api.unfriend(profile.id)
       setProfile({ ...profile, friendshipState: 'None' })
+      setConfirmUnfriend(false)
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed to unfriend')
     } finally {
@@ -532,9 +554,19 @@ function OtherProfileView({ userId }: { userId: string }) {
           </>
         )}
         {profile.friendshipState === 'Friends' && (
-          <button onClick={unfriend} disabled={busy} className="deck-btn danger">Unfriend</button>
+          <button onClick={() => setConfirmUnfriend(true)} disabled={busy} className="deck-btn danger">Unfriend</button>
         )}
       </div>
+      <ConfirmationDialog
+        open={confirmUnfriend}
+        title="Unfriend?"
+        message={`Remove ${profile.displayName} from your friends?`}
+        confirmLabel="Unfriend"
+        busy={busy}
+        onCancel={() => setConfirmUnfriend(false)}
+        onConfirm={unfriend}
+      />
     </div>
   )
 }
+

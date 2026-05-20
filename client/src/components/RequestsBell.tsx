@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type PendingRequests } from '../api'
+import { RequestsSkeleton } from './Skeletons'
 
 const POLL_INTERVAL_MS = 60_000
 
@@ -117,14 +118,14 @@ export default function RequestsBell() {
         className="requests-bell-trigger"
         aria-label={`Friend requests${count > 0 ? ` (${count} pending)` : ''}`}
       >
-        <span aria-hidden="true">🔔</span>
+        <BellIcon />
         {count > 0 && <span className="requests-bell-badge">{count > 9 ? '9+' : count}</span>}
       </button>
       {open && (
         <div className="requests-bell-dropdown" role="menu">
           <div className="requests-bell-header"><strong>Friend requests</strong></div>
           <div className="user-menu-divider" />
-          {loadingList && <div className="requests-bell-empty">Loading…</div>}
+          {loadingList && <RequestsSkeleton />}
           {error && <div className="requests-bell-empty" style={{ color: 'var(--danger, #c33)' }}>{error}</div>}
           {!loadingList && data && (
             <>
@@ -163,3 +164,14 @@ export default function RequestsBell() {
     </div>
   )
 }
+
+function BellIcon() {
+  return (
+    <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M18 16v-5a6 6 0 0 0-12 0v5l-2 2v1h16v-1l-2-2z" />
+      <path d="M10 21h4a2 2 0 0 1-4 0z" />
+    </svg>
+  )
+}
+
+

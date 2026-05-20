@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, type UserProfile, type UserRole } from '../api'
+import ConfirmationDialog from './ConfirmationDialog'
 
 interface Props {
   user: UserProfile
@@ -19,6 +20,7 @@ export default function EditUserSheet({ user, currentUserId, onClose, onUpdated,
   const [role, setRole] = useState<UserRole>(user.role)
   const [saving, setSaving] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const isSelf = user.id === currentUserId
 
   useEffect(() => {
@@ -46,11 +48,14 @@ export default function EditUserSheet({ user, currentUserId, onClose, onUpdated,
   }
 
   const deleteUser = async () => {
+    setDeleting(true)
     try {
       await api.adminDeleteUser(user.id)
       onDeleted(user.id)
     } catch (e: any) {
       alert(e.message)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -92,21 +97,19 @@ export default function EditUserSheet({ user, currentUserId, onClose, onUpdated,
           {isSelf && <p className="hint">You cannot change your own role or delete yourself.</p>}
 
           {!isSelf && (
-            !confirmingDelete ? (
-              <button onClick={() => setConfirmingDelete(true)} className="deck-btn danger" style={{ marginTop: '8px', width: '100%', display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
-                <TrashIcon /> Delete user
-              </button>
-            ) : (
-              <div className="confirm-row">
-                <div className="confirm-actions">
-                  <button onClick={() => setConfirmingDelete(false)} className="deck-btn cancel-btn">Cancel</button>
-                  <button onClick={deleteUser} className="deck-btn danger-solid">
-                    <TrashIcon /> Delete user
-                  </button>
-                </div>
-              </div>
-            )
+            <button onClick={() => setConfirmingDelete(true)} className="deck-btn danger" style={{ marginTop: '8px', width: '100%', display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
+              <TrashIcon /> Delete user
+            </button>
           )}
+          <ConfirmationDialog
+            open={confirmingDelete}
+            title="Delete user?"
+            message={`${user.displayName || user.email} will be permanently deleted.`}
+            confirmLabel="Delete user"
+            busy={deleting}
+            onCancel={() => setConfirmingDelete(false)}
+            onConfirm={deleteUser}
+          />
         </div>
       </div>
     </div>

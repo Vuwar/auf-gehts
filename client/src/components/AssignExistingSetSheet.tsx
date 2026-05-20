@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, type WordSet } from '../api'
+import { ListSkeleton } from './Skeletons'
 
 interface Props {
   weekId: string
@@ -81,7 +82,7 @@ export default function AssignExistingSetSheet({ weekId, onClose, onAssigned }: 
           <p className="hint">Pick any public set and mark it as official under this week.</p>
 
           {loading ? (
-            <p className="hint">Searching...</p>
+            <ListSkeleton rows={4} />
           ) : results.length === 0 ? (
             <p className="empty-state">No matches.</p>
           ) : (

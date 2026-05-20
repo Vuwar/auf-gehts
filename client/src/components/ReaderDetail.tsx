@@ -5,6 +5,8 @@ import { useAuth } from '../auth'
 import WordLookupPopup from './WordLookupPopup'
 import AudioPlayer from './AudioPlayer'
 import FilePicker from './FilePicker'
+import ConfirmationDialog from './ConfirmationDialog'
+import { PageSkeleton } from './Skeletons'
 
 type PassageMode = 'listen' | 'both' | 'read'
 const PASSAGE_MODE_KEY = 'passageMode'
@@ -39,6 +41,7 @@ export default function ReaderDetail() {
   const [audioCompleted, setAudioCompleted] = useState(false)
   const [revealText, setRevealText] = useState(false)
   const [audioBusy, setAudioBusy] = useState(false)
+  const [confirmAction, setConfirmAction] = useState<'deleteText' | 'removeAudio' | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -74,7 +77,6 @@ export default function ReaderDetail() {
 
   const onDelete = async () => {
     if (!text) return
-    if (!confirm(`Delete "${text.title}"?`)) return
     await api.deleteReadingText(text.id)
     nav('/reader')
   }
@@ -107,7 +109,6 @@ export default function ReaderDetail() {
 
   const removeAudio = async () => {
     if (!text) return
-    if (!confirm('Remove audio for this passage?')) return
     setAudioBusy(true)
     try {
       await api.deletePassageAudio(text.id)
@@ -131,7 +132,7 @@ export default function ReaderDetail() {
     return { correct, total }
   }, [text, checked, answers])
 
-  if (loading) return <div className="deck"><p className="empty-state">Loading...</p></div>
+  if (loading) return <PageSkeleton page="detail" />
   if (!text) return <div className="deck"><p className="empty-state">Text not found.</p></div>
 
   const showAudio = (effectiveMode === 'listen' || effectiveMode === 'both') && text.audioUrl
@@ -156,7 +157,7 @@ export default function ReaderDetail() {
           </div>
         </div>
         {(isAdmin || text.isOwner) && (
-          <button onClick={onDelete} className="deck-btn danger">Delete</button>
+          <button onClick={() => setConfirmAction('deleteText')} className="deck-btn danger">Delete</button>
         )}
       </div>
 
@@ -228,7 +229,7 @@ export default function ReaderDetail() {
               {audioBusy ? 'Working…' : (text.audioUrl ? 'Regenerate TTS' : 'Generate TTS')}
             </button>
             {text.audioUrl && (
-              <button onClick={removeAudio} disabled={audioBusy} className="deck-btn danger">Remove audio</button>
+              <button onClick={() => setConfirmAction('removeAudio')} disabled={audioBusy} className="deck-btn danger">Remove audio</button>
             )}
           </div>
           <FilePicker
@@ -283,6 +284,26 @@ export default function ReaderDetail() {
           onSaved={(front) => setVocabFronts(new Set([...vocabFronts, normalize(front)]))}
         />
       )}
+      <ConfirmationDialog
+        open={confirmAction === 'deleteText'}
+        title="Delete text?"
+        message={`"${text.title}" and its questions will be permanently deleted.`}
+        confirmLabel="Delete text"
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={onDelete}
+      />
+      <ConfirmationDialog
+        open={confirmAction === 'removeAudio'}
+        title="Remove audio?"
+        message="This removes the audio file from this passage. You can upload or generate a new one later."
+        confirmLabel="Remove audio"
+        busy={audioBusy}
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={async () => {
+          await removeAudio()
+          setConfirmAction(null)
+        }}
+      />
     </div>
   )
 }

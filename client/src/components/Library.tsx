@@ -4,6 +4,7 @@ import { api, type Library as LibraryData, type WordSet } from '../api'
 import { useAuth } from '../auth'
 import ErrorView from './ErrorView'
 import CreateSetSheet from './CreateSetSheet'
+import { PageSkeleton } from './Skeletons'
 
 export default function Library() {
   const nav = useNavigate()
@@ -29,7 +30,7 @@ export default function Library() {
     } finally { setLoading(false) }
   }
 
-  if (loading) return <div className="deck"><p className="empty-state">Loading...</p></div>
+  if (loading) return <PageSkeleton page="library" />
   if (error) return <div className="deck"><ErrorView error={error} onRetry={load} /></div>
   if (!data) return null
 

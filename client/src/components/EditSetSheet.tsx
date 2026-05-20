@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, type Week, type Word, type WordSet } from '../api'
 import { useAuth } from '../auth'
 import AddWordsPanel from './AddWordsPanel'
+import ConfirmationDialog from './ConfirmationDialog'
 
 interface Props {
   set: WordSet
@@ -25,6 +26,8 @@ export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWord
   const [addOpen, setAddOpen] = useState(false)
   const [wordsOpen, setWordsOpen] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [confirmWord, setConfirmWord] = useState<Word | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -98,14 +101,26 @@ export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWord
     onWordsChanged(fresh)
   }
 
-  const deleteWord = async (id: string) => {
-    await api.deleteWord(id)
-    onWordsChanged(words.filter(w => w.id !== id))
+  const deleteWord = async () => {
+    if (!confirmWord) return
+    setDeleting(true)
+    try {
+      await api.deleteWord(confirmWord.id)
+      onWordsChanged(words.filter(w => w.id !== confirmWord.id))
+      setConfirmWord(null)
+    } finally {
+      setDeleting(false)
+    }
   }
 
   const deleteSet = async () => {
-    await api.deleteSet(set.id)
-    onDeleted()
+    setDeleting(true)
+    try {
+      await api.deleteSet(set.id)
+      onDeleted()
+    } finally {
+      setDeleting(false)
+    }
   }
 
   return (
@@ -209,7 +224,7 @@ export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWord
                         const updated = await api.updateWord(w.id, front, back, w.context ?? undefined)
                         onWordsChanged(words.map(x => x.id === w.id ? updated : x))
                       }}
-                      onDelete={() => deleteWord(w.id)}
+                      onDelete={() => setConfirmWord(w)}
                     />
                   ))}
                 </ul>
@@ -217,20 +232,29 @@ export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWord
             </div>
           )}
 
-          {set.name === 'My Vocabulary' ? null : !confirmingDelete ? (
+          {set.name === 'My Vocabulary' ? null : (
             <button onClick={() => setConfirmingDelete(true)} className="deck-btn danger" style={{ marginTop: '8px', width: '100%', display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
               <TrashIcon /> Delete set
             </button>
-          ) : (
-            <div className="confirm-row">
-              <div className="confirm-actions">
-                <button onClick={() => setConfirmingDelete(false)} className="deck-btn cancel-btn">Cancel</button>
-                <button onClick={deleteSet} className="deck-btn danger-solid">
-                  <TrashIcon /> Delete
-                </button>
-              </div>
-            </div>
           )}
+          <ConfirmationDialog
+            open={confirmingDelete}
+            title="Delete set?"
+            message={`"${set.name}" and its words will be permanently deleted.`}
+            confirmLabel="Delete set"
+            busy={deleting}
+            onCancel={() => setConfirmingDelete(false)}
+            onConfirm={deleteSet}
+          />
+          <ConfirmationDialog
+            open={!!confirmWord}
+            title="Delete word?"
+            message={`"${confirmWord?.front ?? 'This word'}" will be permanently removed from this set.`}
+            confirmLabel="Delete word"
+            busy={deleting}
+            onCancel={() => setConfirmWord(null)}
+            onConfirm={deleteWord}
+          />
         </div>
       </div>
     </div>
