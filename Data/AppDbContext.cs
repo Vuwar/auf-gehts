@@ -17,6 +17,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ReadingTextQuestion> ReadingTextQuestions => Set<ReadingTextQuestion>();
     public DbSet<EventLog> EventLogs => Set<EventLog>();
     public DbSet<Friendship> Friendships => Set<Friendship>();
+    public DbSet<Tag> Tags => Set<Tag>();
+    public DbSet<UserTagProgress> UserTagProgress => Set<UserTagProgress>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -180,6 +182,45 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(e => e.PayloadJson).IsRequired();
             entity.Property(e => e.CachedAt).HasDefaultValueSql("now()");
             entity.HasIndex(e => e.Word).IsUnique();
+        });
+
+        modelBuilder.Entity<Tag>(entity =>
+        {
+            entity.ToTable("tags");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Name).IsRequired();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.HasIndex(e => new { e.WeekId, e.TagNumber }).IsUnique();
+            entity.HasOne(e => e.Week)
+                  .WithMany(w => w.Tags)
+                  .HasForeignKey(e => e.WeekId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.WordSet)
+                  .WithMany()
+                  .HasForeignKey(e => e.WordSetId)
+                  .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(e => e.ReadingText)
+                  .WithMany()
+                  .HasForeignKey(e => e.ReadingTextId)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<UserTagProgress>(entity =>
+        {
+            entity.ToTable("user_tag_progress");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.LastReviewedAt).HasDefaultValueSql("now()");
+            entity.HasIndex(e => new { e.UserId, e.TagId }).IsUnique();
+            entity.HasOne(e => e.Tag)
+                  .WithMany()
+                  .HasForeignKey(e => e.TagId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Friendship>(entity =>

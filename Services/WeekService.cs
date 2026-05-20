@@ -12,31 +12,42 @@ public class WeekService(
     IWeekRepository weeks,
     IProgressRepository progress,
     CurrentUserAccessor currentUser,
+    TagService tagService,
     AppDbContext db)
 {
     public async Task<List<WeekResponse>> ListAsync(Guid userId)
     {
-        // 1 query: weeks
         var all = await weeks.GetAllAsync();
 
-        // 1 query: all official set IDs per week
         var setsByWeek = await db.WordSets
             .Where(s => s.WeekId != null && s.IsOfficial && s.IsPublic)
             .Select(s => new { s.Id, WeekId = s.WeekId!.Value })
             .ToListAsync();
 
-        // 1 query: user's progress statuses
         var statuses = await progress.GetStatusesForUserAsync(userId);
 
         var weekSetMap = setsByWeek
             .GroupBy(x => x.WeekId)
             .ToDictionary(g => g.Key, g => g.Select(x => x.Id).ToList());
 
+        var tagRows = await db.Tags.Select(t => new { t.Id, t.WeekId }).ToListAsync();
+        var tagsByWeek = tagRows.GroupBy(t => t.WeekId).ToDictionary(g => g.Key, g => g.Select(x => x.Id).ToList());
+
+        var completedTagIds = await db.UserTagProgress
+            .Where(p => p.UserId == userId && p.CompletedStepsMask == TagService.AllStepsMask)
+            .Select(p => p.TagId)
+            .ToListAsync();
+        var completedTagSet = completedTagIds.ToHashSet();
+
+        var lockMap = await tagService.GetWeekLockMapAsync(all, userId);
+
         return all.Select(w =>
         {
             var setIds = weekSetMap.GetValueOrDefault(w.Id, []);
             var completed = setIds.Count(id => statuses.GetValueOrDefault(id) == Models.ProgressStatus.Completed);
-            return new WeekResponse(w.Id, w.Number, w.Title, w.Description, setIds.Count, completed);
+            var tagIds = tagsByWeek.GetValueOrDefault(w.Id, []);
+            var completedTags = tagIds.Count(id => completedTagSet.Contains(id));
+            return new WeekResponse(w.Id, w.Number, w.Title, w.Description, setIds.Count, completed, tagIds.Count, completedTags, lockMap.GetValueOrDefault(w.Id, false));
         }).ToList();
     }
 
@@ -63,7 +74,10 @@ public class WeekService(
             .Select(t => new ReadingTextSummaryResponse(t.Id, t.Title, t.Level, t.Questions.Count, t.Content.Length))
             .ToListAsync();
 
-        return new WeekDetailResponse(week.Id, week.Number, week.Title, week.Description, setResponses, texts);
+        var tags = await tagService.ListAsync(id, userId);
+        var locked = await tagService.IsWeekLockedAsync(id, userId);
+
+        return new WeekDetailResponse(week.Id, week.Number, week.Title, week.Description, setResponses, texts, tags, locked);
     }
 
     public async Task<(Week? week, string? error)> CreateAsync(CreateWeekRequest req)

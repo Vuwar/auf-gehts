@@ -10,6 +10,9 @@ export interface Week {
   description: string | null
   setCount: number
   completedCount: number
+  tagCount: number
+  completedTagCount: number
+  isLocked: boolean
 }
 
 export interface WeekDetail {
@@ -19,6 +22,48 @@ export interface WeekDetail {
   description: string | null
   sets: WordSet[]
   readingTexts: ReadingTextSummary[]
+  tags: Tag[]
+  isLocked: boolean
+}
+
+export interface Tag {
+  id: string
+  weekId: string
+  tagNumber: number
+  name: string
+  wordSetId: string | null
+  wordSetName: string | null
+  wordCount: number | null
+  readingTextId: string | null
+  readingTextTitle: string | null
+  questionCount: number
+  hasAudio: boolean
+  completedStepsMask: number
+  lastStep: number
+  isCompleted: boolean
+}
+
+export interface TagDetail {
+  id: string
+  weekId: string
+  weekNumber: number
+  weekTitle: string
+  tagNumber: number
+  name: string
+  wordSet: WordSet | null
+  words: Word[]
+  readingText: ReadingText | null
+  completedStepsMask: number
+  lastStep: number
+  isCompleted: boolean
+  isLocked: boolean
+}
+
+export interface GeneratedTagPassage {
+  title: string
+  content: string
+  level: string
+  questions: ReadingTextQuestion[]
 }
 
 export interface ReadingTextSummary {
@@ -491,6 +536,48 @@ export const api = {
       body: JSON.stringify({ number: data.number ?? null, title: data.title ?? null, description: data.description ?? null }),
     }),
   deleteWeek: (id: string) => request<void>(`${API_BASE}/weeks/${id}`, { method: 'DELETE' }),
+
+  listTags: (weekId: string) => request<Tag[]>(`${API_BASE}/weeks/${weekId}/tags`),
+  getTag: (id: string) => request<TagDetail>(`${API_BASE}/tags/${id}`),
+  createTag: (weekId: string, data: { tagNumber: number; name: string; wordSetId?: string | null; readingTextId?: string | null }) =>
+    request<{ id: string; weekId: string; tagNumber: number; name: string; wordSetId: string | null; readingTextId: string | null }>(
+      `${API_BASE}/weeks/${weekId}/tags`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          tagNumber: data.tagNumber,
+          name: data.name,
+          wordSetId: data.wordSetId ?? null,
+          readingTextId: data.readingTextId ?? null,
+        }),
+      }
+    ),
+  updateTag: (id: string, data: { tagNumber?: number; name?: string; wordSetId?: string | null; readingTextId?: string | null; clearWordSet?: boolean; clearReadingText?: boolean }) =>
+    request<{ id: string; tagNumber: number; name: string; wordSetId: string | null; readingTextId: string | null }>(
+      `${API_BASE}/tags/${id}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          tagNumber: data.tagNumber ?? null,
+          name: data.name ?? null,
+          wordSetId: data.wordSetId ?? null,
+          readingTextId: data.readingTextId ?? null,
+          clearWordSet: data.clearWordSet ?? false,
+          clearReadingText: data.clearReadingText ?? false,
+        }),
+      }
+    ),
+  deleteTag: (id: string) => request<void>(`${API_BASE}/tags/${id}`, { method: 'DELETE' }),
+  completeTagStep: (id: string, stepIndex: number) =>
+    request<{ completedStepsMask: number; lastStep: number; isCompleted: boolean }>(`${API_BASE}/tags/${id}/progress`, {
+      method: 'POST',
+      body: JSON.stringify({ stepIndex }),
+    }),
+  generateTagPassage: (id: string, wordSetId: string, level?: string, questionCount?: number) =>
+    request<GeneratedTagPassage>(`${API_BASE}/tags/${id}/generate-passage`, {
+      method: 'POST',
+      body: JSON.stringify({ wordSetId, level: level ?? null, questionCount: questionCount ?? null }),
+    }),
 
   getLibrary: () => request<Library>(`${API_BASE}/sets/library`),
   getSet: (idOrSlug: string) => request<WordSet>(`${API_BASE}/sets/${idOrSlug}`),

@@ -108,6 +108,7 @@ builder.Services.AddSingleton<ITtsService, AzureTtsService>();
 builder.Services.AddSingleton<IAudioStorage, SupabaseAudioStorage>();
 builder.Services.AddScoped<AiService>();
 builder.Services.AddScoped<ReadingTextService>();
+builder.Services.AddScoped<TagService>();
 
 var projectRef = builder.Configuration["Supabase:ProjectRef"]
     ?? throw new InvalidOperationException("Supabase:ProjectRef missing");

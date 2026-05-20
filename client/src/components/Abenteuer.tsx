@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { api, type Week, type WeekDetail, type WordSet } from '../api'
+import { api, type Week, type WeekDetail, type WordSet, type Tag } from '../api'
 import { useAuth } from '../auth'
 import EditWeekSheet from './EditWeekSheet'
 import CreateSetForWeekSheet from './CreateSetForWeekSheet'
@@ -55,12 +55,23 @@ export default function Abenteuer() {
           <button onClick={() => nav('/abenteuer')} className="deck-btn">← All weeks</button>
         </div>
         <div className="deck-header">
-          <h1>Woche {detail.number}: {detail.title}</h1>
+          <h1>{detail.isLocked && '🔒 '}Woche {detail.number}: {detail.title}</h1>
           {isAdmin && (
             <button onClick={() => setEditingWeek(true)} className="deck-btn">Edit week</button>
           )}
         </div>
         {detail.description && <p className="hint">{detail.description}</p>}
+        {detail.isLocked && (
+          <p className="empty-state">🔒 Finish the previous Woche to unlock these Tage. You can preview but not start.</p>
+        )}
+
+        <h2 className="section-title">Tage</h2>
+        {detail.tags.length === 0 && <p className="empty-state">No Tage yet.{isAdmin ? ' Add via Edit week.' : ''}</p>}
+        <ul className="deck-list">
+          {detail.tags.sort((a, b) => a.tagNumber - b.tagNumber).map(t => (
+            <TagRow key={t.id} tag={t} locked={detail.isLocked} onClick={() => !detail.isLocked && nav(`/tags/${t.id}`)} />
+          ))}
+        </ul>
 
         <h2 className="section-title">Word sets</h2>
         {detail.sets.length === 0 && <p className="empty-state">No sets yet.</p>}
@@ -161,7 +172,7 @@ export default function Abenteuer() {
           <button onClick={() => setCreatingWeek(true)} className="deck-btn primary">+ Add week</button>
         )}
       </div>
-      <p className="hint">Work through each week in order, or jump around.</p>
+      <p className="hint">Complete each Woche to unlock the next.</p>
 
       {creatingWeek && (
         <CreateWeekSheet
@@ -173,21 +184,49 @@ export default function Abenteuer() {
 
       <div className="weeks-grid">
         {weeks.map(w => {
-          const pct = w.setCount > 0 ? Math.round((w.completedCount / w.setCount) * 100) : 0
+          const denom = w.tagCount > 0 ? w.tagCount : w.setCount
+          const num = w.tagCount > 0 ? w.completedTagCount : w.completedCount
+          const pct = denom > 0 ? Math.round((num / denom) * 100) : 0
+          const unitLabel = w.tagCount > 0 ? 'Tage' : 'sets'
           return (
-            <button key={w.id} onClick={() => nav(`/abenteuer/woche-${w.number}`)} className="week-card">
-              <div className="week-card-num">Woche {w.number}</div>
+            <button
+              key={w.id}
+              onClick={() => nav(`/abenteuer/woche-${w.number}`)}
+              className={`week-card ${w.isLocked ? 'week-card-locked' : ''}`}
+              style={w.isLocked ? { opacity: 0.55 } : {}}
+            >
+              <div className="week-card-num">{w.isLocked && '🔒 '}Woche {w.number}</div>
               <div className="week-card-title">{w.title}</div>
               {w.description && <div className="hint">{w.description}</div>}
               <div className="week-progress-bar">
                 <div className="week-progress-fill" style={{ width: `${pct}%` }} />
               </div>
-              <div className="hint">{w.completedCount} / {w.setCount} sets completed</div>
+              <div className="hint">
+                {w.tagCount > 0
+                  ? `Tag ${w.completedTagCount} / ${w.tagCount} completed`
+                  : `${num} / ${denom} ${unitLabel} completed`}
+              </div>
             </button>
           )
         })}
       </div>
     </div>
+  )
+}
+
+function TagRow({ tag, locked, onClick }: { tag: Tag; locked: boolean; onClick: () => void }) {
+  const icon = locked ? '🔒' : tag.isCompleted ? '✓' : tag.completedStepsMask > 0 ? '◐' : '○'
+  return (
+    <li className="deck-item" style={locked ? { opacity: 0.55 } : {}}>
+      <button onClick={onClick} className="deck-item-main" disabled={locked}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ color: tag.isCompleted ? 'var(--accent)' : undefined }}>{icon}</span>
+          <strong>Tag {tag.tagNumber}: {tag.name}</strong>
+          {tag.wordSetName && <span className="deck-item-count">· {tag.wordCount ?? 0} words</span>}
+          {tag.readingTextTitle && <span className="deck-item-count">· {tag.questionCount} Qs {tag.hasAudio ? '🎧' : ''}</span>}
+        </div>
+      </button>
+    </li>
   )
 }
 

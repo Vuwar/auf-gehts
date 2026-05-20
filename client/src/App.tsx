@@ -8,6 +8,7 @@ import AdminLogs from './components/AdminLogs'
 import Profile from './components/Profile'
 import Login from './components/Login'
 import Abenteuer from './components/Abenteuer'
+import TagFlow from './components/TagFlow'
 import UserMenu from './components/UserMenu'
 import RequestsBell from './components/RequestsBell'
 import Alphabet from './components/Alphabet'
@@ -104,6 +105,7 @@ export default function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/abenteuer" element={<Abenteuer />} />
             <Route path="/abenteuer/:weekSlug" element={<Abenteuer />} />
+            <Route path="/tags/:tagId" element={<TagFlow />} />
             <Route path="/library" element={<Library />} />
             <Route path="/sets/:setSlug" element={<WordSetView />} />
             <Route path="/reader" element={<Reader />} />

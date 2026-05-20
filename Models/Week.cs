@@ -10,4 +10,5 @@ public class Week
 
     public List<WordSet> WordSets { get; set; } = [];
     public List<ReadingText> ReadingTexts { get; set; } = [];
+    public List<Tag> Tags { get; set; } = [];
 }

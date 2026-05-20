@@ -52,7 +52,11 @@
       "PowerShell($j = Get-Content -Raw \"C:\\\\Users\\\\vuqar.karimli\\\\Downloads\\\\diagnostics-20260519-064659.json\" | ConvertFrom-Json; \"GENERATED: $\\($j.generatedAtUtc\\)  WINDOW: $\\($j.windowMinutes\\)min\"; \"UPTIME: $\\([math]::Round\\($j.app.uptimeSeconds\\)\\)s\"; \"---DB---\"; $j.db | ConvertTo-Json -Depth 5; \"---CONC---\"; $j.concurrency | ConvertTo-Json; \"---DIAG---\"; $j.diagnostic | ConvertTo-Json -Depth 8)",
       "PowerShell($j = Get-Content -Raw \"C:\\\\Users\\\\vuqar.karimli\\\\Downloads\\\\diagnostics-20260519-064659.json\" | ConvertFrom-Json; $j.logs.slowEndpoints | ConvertTo-Json -Depth 5; \"---TOP TYPES---\"; $j.logs.topEventTypes | ConvertTo-Json; \"---WARNINGS RECENT---\"; $j.logs.recent | Where-Object {$_.level -eq \"Warning\"} | Select-Object timestamp,eventType,endpoint,durationMs,concurrency | ConvertTo-Json -Depth 3)",
       "Bash(python *)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "PowerShell(Set-Location C:\\\\Users\\\\vuqar.karimli\\\\auf-gehts\\\\client; npx tsc --noEmit -p tsconfig.app.json; Write-Output \"exit=$LASTEXITCODE\")"
     ]
   },
   "enableAllProjectMcpServers": true,

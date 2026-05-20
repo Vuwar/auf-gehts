@@ -6,7 +6,10 @@ public record WeekResponse(
     string Title,
     string? Description,
     int SetCount,
-    int CompletedCount
+    int CompletedCount,
+    int TagCount,
+    int CompletedTagCount,
+    bool IsLocked
 );
 
 public record WeekDetailResponse(
@@ -15,7 +18,9 @@ public record WeekDetailResponse(
     string Title,
     string? Description,
     List<WordSetResponse> Sets,
-    List<ReadingTextSummaryResponse> ReadingTexts
+    List<ReadingTextSummaryResponse> ReadingTexts,
+    List<TagResponse> Tags,
+    bool IsLocked
 );
 
 public record ReadingTextSummaryResponse(
