@@ -6,6 +6,8 @@ import EditWeekSheet from './EditWeekSheet'
 import CreateSetForWeekSheet from './CreateSetForWeekSheet'
 import AssignExistingSetSheet from './AssignExistingSetSheet'
 import CreateWeekSheet from './CreateWeekSheet'
+import ConfirmationDialog from './ConfirmationDialog'
+import { PageSkeleton } from './Skeletons'
 
 export default function Abenteuer() {
   const { weekSlug } = useParams<{ weekSlug?: string }>()
@@ -18,7 +20,8 @@ export default function Abenteuer() {
   const [creatingSet, setCreatingSet] = useState(false)
   const [assigningExisting, setAssigningExisting] = useState(false)
   const [creatingWeek, setCreatingWeek] = useState(false)
-  const [confirmDeleteSet, setConfirmDeleteSet] = useState<string | null>(null)
+  const [confirmDeleteSet, setConfirmDeleteSet] = useState<WordSet | null>(null)
+  const [deletingSet, setDeletingSet] = useState(false)
   const nav = useNavigate()
 
   useEffect(() => {
@@ -40,13 +43,19 @@ export default function Abenteuer() {
     }
   }
 
-  const deleteSet = async (id: string) => {
-    await api.deleteSet(id)
-    setConfirmDeleteSet(null)
-    reload()
+  const deleteSet = async () => {
+    if (!confirmDeleteSet) return
+    setDeletingSet(true)
+    try {
+      await api.deleteSet(confirmDeleteSet.id)
+      setConfirmDeleteSet(null)
+      reload()
+    } finally {
+      setDeletingSet(false)
+    }
   }
 
-  if (loading) return <div className="deck"><p className="empty-state">Loading...</p></div>
+  if (loading) return <PageSkeleton page={weekSlug ? 'detail' : 'abenteuer'} />
 
   if (weekSlug && detail) {
     return (
@@ -88,18 +97,20 @@ export default function Abenteuer() {
                 {s.description && <div className="hint" style={{ marginTop: '4px' }}>{s.description}</div>}
               </button>
               {isAdmin && (
-                confirmDeleteSet === s.id ? (
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button onClick={() => setConfirmDeleteSet(null)} className="deck-btn cancel-btn">Cancel</button>
-                    <button onClick={() => deleteSet(s.id)} className="deck-btn danger-solid">Delete</button>
-                  </div>
-                ) : (
-                  <button onClick={() => setConfirmDeleteSet(s.id)} className="deck-btn danger" aria-label="Delete set">×</button>
-                )
+                <button onClick={() => setConfirmDeleteSet(s)} className="deck-btn danger" aria-label="Delete set">×</button>
               )}
             </li>
           ))}
         </ul>
+        <ConfirmationDialog
+          open={!!confirmDeleteSet}
+          title="Delete set?"
+          message={`"${confirmDeleteSet?.name ?? 'This set'}" and its words will be permanently deleted.`}
+          confirmLabel="Delete set"
+          busy={deletingSet}
+          onCancel={() => setConfirmDeleteSet(null)}
+          onConfirm={deleteSet}
+        />
 
         {isAdmin && (
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>

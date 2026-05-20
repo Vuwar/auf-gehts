@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { api, type TagDetail, type Word, type ReadingTextQuestion } from '../api'
 import { speakGerman, stopSpeaking, ttsAvailable } from '../tts'
 import AudioPlayer from './AudioPlayer'
+import { PageSkeleton } from './Skeletons'
 
 const STEP_LABELS = [
   '1. Neue Wörter',
@@ -65,7 +66,7 @@ export default function TagFlow() {
     setView('step')
   }
 
-  if (loading) return <div className="deck"><p className="empty-state">Loading...</p></div>
+  if (loading) return <PageSkeleton page="detail" />
   if (!tag) return <div className="deck"><p className="empty-state">Tag not found.</p></div>
 
   if (tag.isLocked) {

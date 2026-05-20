@@ -7,6 +7,7 @@ import EditSetSheet, { PenIcon } from './EditSetSheet'
 import HoldToConfirm from './HoldToConfirm'
 import ErrorView from './ErrorView'
 import SpeakerIcon from './SpeakerIcon'
+import { PageSkeleton } from './Skeletons'
 import { speakGerman } from '../tts'
 
 type View = 'list' | 'study'
@@ -139,7 +140,7 @@ export default function WordSetView() {
   }
 
 
-  if (loading) return <div className="deck"><p className="empty-state">Loading...</p></div>
+  if (loading) return <PageSkeleton page="detail" />
   if (error) return <div className="deck"><ErrorView error={error} context="set" /></div>
   if (!set) return null
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, type WordLookup } from '../api'
 import SpeakerIcon from './SpeakerIcon'
 import { speakGerman } from '../tts'
+import { PopupSkeleton } from './Skeletons'
 
 interface Props {
   word: string
@@ -66,7 +67,7 @@ export default function WordLookupPopup({ word, sentence, anchorRect, onClose, o
       <div className="word-popup-backdrop" onClick={onClose} />
       <div className="word-popup" style={style} onClick={e => e.stopPropagation()}>
         {loading ? (
-          <p className="empty-state" style={{ margin: 0 }}>Looking up "{word}"...</p>
+          <PopupSkeleton />
         ) : !lookup ? (
           <p className="empty-state" style={{ margin: 0 }}>No data for "{word}".</p>
         ) : (

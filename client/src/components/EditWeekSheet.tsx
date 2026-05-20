@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, type WeekDetail, type Tag, type WordSet } from '../api'
+import ConfirmationDialog from './ConfirmationDialog'
 
 interface Props {
   week: WeekDetail
@@ -14,6 +15,7 @@ export default function EditWeekSheet({ week, onClose, onUpdated, onDeleted }: P
   const [description, setDescription] = useState(week.description ?? '')
   const [saving, setSaving] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [confirmTag, setConfirmTag] = useState<Tag | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const [tags, setTags] = useState<Tag[]>(week.tags ?? [])
@@ -79,12 +81,14 @@ export default function EditWeekSheet({ week, onClose, onUpdated, onDeleted }: P
     }
   }
 
-  const removeTag = async (id: string) => {
-    setTagBusy(id)
+  const removeTag = async () => {
+    if (!confirmTag) return
+    setTagBusy(confirmTag.id)
     try {
-      await api.deleteTag(id)
+      await api.deleteTag(confirmTag.id)
       await reloadTags()
       onUpdated()
+      setConfirmTag(null)
     } finally {
       setTagBusy(null)
     }
@@ -170,7 +174,7 @@ export default function EditWeekSheet({ week, onClose, onUpdated, onDeleted }: P
             <div key={tag.id} className="tag-editor" style={{ border: '1px solid var(--border, #ddd)', borderRadius: '8px', padding: '12px', marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'space-between' }}>
                 <strong>Tag {tag.tagNumber}</strong>
-                <button onClick={() => removeTag(tag.id)} disabled={tagBusy === tag.id} className="deck-btn danger" aria-label="Delete tag">×</button>
+                <button onClick={() => setConfirmTag(tag)} disabled={tagBusy === tag.id} className="deck-btn danger" aria-label="Delete tag">×</button>
               </div>
               <input
                 type="text"
@@ -223,18 +227,26 @@ export default function EditWeekSheet({ week, onClose, onUpdated, onDeleted }: P
             </button>
           )}
 
-          {!confirmingDelete ? (
-            <button onClick={() => setConfirmingDelete(true)} className="deck-btn danger" style={{ marginTop: '16px', width: '100%' }}>
-              Delete week
-            </button>
-          ) : (
-            <div className="confirm-row">
-              <div className="confirm-actions">
-                <button onClick={() => setConfirmingDelete(false)} className="deck-btn cancel-btn">Cancel</button>
-                <button onClick={deleteWeek} className="deck-btn danger-solid">Delete week</button>
-              </div>
-            </div>
-          )}
+          <button onClick={() => setConfirmingDelete(true)} className="deck-btn danger" style={{ marginTop: '16px', width: '100%' }}>
+            Delete week
+          </button>
+          <ConfirmationDialog
+            open={confirmingDelete}
+            title="Delete week?"
+            message={`Woche ${week.number}: ${week.title} will be permanently deleted.`}
+            confirmLabel="Delete week"
+            onCancel={() => setConfirmingDelete(false)}
+            onConfirm={deleteWeek}
+          />
+          <ConfirmationDialog
+            open={!!confirmTag}
+            title="Delete Tag?"
+            message={`Tag ${confirmTag?.tagNumber ?? ''} will be permanently removed from this week.`}
+            confirmLabel="Delete Tag"
+            busy={tagBusy === confirmTag?.id}
+            onCancel={() => setConfirmTag(null)}
+            onConfirm={removeTag}
+          />
         </div>
       </div>
     </div>

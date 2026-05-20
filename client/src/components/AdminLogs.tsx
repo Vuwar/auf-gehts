@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, type DiagnosticReport, type LogEntry, type LogLevel, type LogsPage, type LogsStats } from '../api'
 import { useAuth } from '../auth'
 import { Navigate } from 'react-router-dom'
+import { ListSkeleton, StatsSkeleton } from './Skeletons'
 
 const LEVELS: (LogLevel | '')[] = ['', 'Info', 'Warning', 'Error', 'Critical']
 // 15s (was 5s). Each refresh fires 2 expensive aggregate queries on event_logs; a
@@ -154,6 +155,7 @@ export default function AdminLogs() {
         ))}
       </div>
 
+      {!stats && loading && <StatsSkeleton />}
       {stats && (
         <div className="logs-stats-grid">
           <StatCard label="Inflight" value={stats.concurrencyCurrent} accent />
@@ -240,6 +242,7 @@ export default function AdminLogs() {
         <button onClick={refresh} disabled={loading} className="deck-btn">{loading ? '...' : '↻'}</button>
       </div>
 
+      {!logs && loading && <ListSkeleton rows={6} />}
       {logs && (
         <>
           <div className="logs-table-wrap">

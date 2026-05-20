@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { api, type Dashboard as DashboardData, type Week } from '../api'
 import { useAuth } from '../auth'
 import ErrorView from './ErrorView'
+import { PageSkeleton } from './Skeletons'
 
 export default function Dashboard() {
   const { user, profile } = useAuth()
@@ -32,7 +33,7 @@ export default function Dashboard() {
       .finally(() => setLoading(false))
   }
 
-  if (loading) return <div className="deck"><p className="empty-state">Loading...</p></div>
+  if (loading) return <PageSkeleton page="dashboard" />
   if (error) return <div className="deck"><ErrorView error={error} onRetry={load} /></div>
   if (!data || !weeks) return null
 

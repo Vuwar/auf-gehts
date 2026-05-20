@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type ReadingText } from '../api'
 import CreateTextSheet from './CreateTextSheet'
+import { ListSkeleton } from './Skeletons'
 
 const LEVELS = ['All', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2']
 
@@ -62,7 +63,7 @@ export default function Reader() {
       </div>
 
       {loading ? (
-        <p className="empty-state">Loading...</p>
+        <ListSkeleton rows={5} />
       ) : filtered.length === 0 ? (
         <p className="empty-state">No texts yet. Tap + to add one.</p>
       ) : (

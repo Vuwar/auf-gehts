@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, NavLink, Outlet, useLocation, Link } from 'react-router-dom'
+import type { ReactNode } from 'react'
 import Library from './components/Library'
 import WordSetView from './components/WordSetView'
 import Dashboard from './components/Dashboard'
@@ -9,12 +10,14 @@ import Profile from './components/Profile'
 import Login from './components/Login'
 import Abenteuer from './components/Abenteuer'
 import TagFlow from './components/TagFlow'
-import UserMenu from './components/UserMenu'
+import UserMenu, { StreakIndicator } from './components/UserMenu'
 import RequestsBell from './components/RequestsBell'
 import Alphabet from './components/Alphabet'
 import LoadingBar from './components/LoadingBar'
 import OfflineIndicator from './components/OfflineIndicator'
 import InstallPrompt from './components/InstallPrompt'
+import PWAUpdatePrompt from './components/PWAUpdatePrompt'
+import { AppShellSkeleton } from './components/Skeletons'
 import { AuthProvider, useAuth } from './auth'
 import './App.css'
 
@@ -34,12 +37,13 @@ function TopBar() {
         </span>
       </Link>
       <nav className="top-bar-nav">
-        <NavLink to="/dashboard" className={({ isActive }) => `top-bar-link ${isActive ? 'active' : ''}`}>Dashboard</NavLink>
-        <NavLink to="/abenteuer" className={({ isActive }) => `top-bar-link ${isActive ? 'active' : ''}`}>Abenteuer</NavLink>
-        <NavLink to="/library" className={({ isActive }) => `top-bar-link ${isActive ? 'active' : ''}`}>Library</NavLink>
-        <NavLink to="/reader" className={({ isActive }) => `top-bar-link ${isActive ? 'active' : ''}`}>Reader</NavLink>
+        <NavLink to="/dashboard" className={({ isActive }) => `top-bar-link ${isActive ? 'active' : ''}`}><NavIcon name="home" />Dashboard</NavLink>
+        <NavLink to="/abenteuer" className={({ isActive }) => `top-bar-link ${isActive ? 'active' : ''}`}><NavIcon name="map" />Abenteuer</NavLink>
+        <NavLink to="/library" className={({ isActive }) => `top-bar-link ${isActive ? 'active' : ''}`}><NavIcon name="book" />Library</NavLink>
+        <NavLink to="/reader" className={({ isActive }) => `top-bar-link ${isActive ? 'active' : ''}`}><NavIcon name="reader" />Reader</NavLink>
       </nav>
       <div className="top-bar-right">
+        <StreakIndicator />
         <RequestsBell />
         <UserMenu />
       </div>
@@ -48,17 +52,17 @@ function TopBar() {
 }
 
 function BottomNav() {
-  const items: { to: string; label: string; icon: string }[] = [
-    { to: '/dashboard', label: 'Home', icon: '🏠' },
-    { to: '/abenteuer', label: 'Abenteuer', icon: '🗺️' },
-    { to: '/library', label: 'Library', icon: '📚' },
-    { to: '/reader', label: 'Reader', icon: '📖' },
+  const items: { to: string; label: string; icon: NavIconName }[] = [
+    { to: '/dashboard', label: 'Home', icon: 'home' },
+    { to: '/abenteuer', label: 'Abenteuer', icon: 'map' },
+    { to: '/library', label: 'Library', icon: 'book' },
+    { to: '/reader', label: 'Reader', icon: 'reader' },
   ]
   return (
     <nav className="bottom-nav">
       {items.map(it => (
         <NavLink key={it.to} to={it.to} className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
-          <span className="bottom-nav-icon">{it.icon}</span>
+          <NavIcon name={it.icon} />
           <span className="bottom-nav-label">{it.label}</span>
         </NavLink>
       ))}
@@ -66,12 +70,27 @@ function BottomNav() {
   )
 }
 
+type NavIconName = 'home' | 'map' | 'book' | 'reader'
+
+function NavIcon({ name }: { name: NavIconName }) {
+  const paths: Record<NavIconName, ReactNode> = {
+    home: <path d="M3 11.5 12 4l9 7.5V21h-6v-6H9v6H3z" />,
+    map: <><path d="M4 6.5 9 4l6 2.5 5-2.5v13.5L15 20l-6-2.5L4 20z" /><path d="M9 4v13.5" /><path d="M15 6.5V20" /></>,
+    book: <><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 0-3-3z" /><path d="M5 4v13" /><path d="M8 7h7" /><path d="M8 10h6" /></>,
+    reader: <><path d="M6 4h12a2 2 0 0 1 2 2v14H8a4 4 0 0 0-4-4V6a2 2 0 0 1 2-2z" /><path d="M8 8h8" /><path d="M8 12h6" /></>,
+  }
+  return (
+    <svg className="bottom-nav-icon nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+      {paths[name]}
+    </svg>
+  )
+}
 function ProtectedLayout() {
   const { user, loading } = useAuth()
   const location = useLocation()
 
   if (loading) {
-    return <main><div className="app-content"><p className="empty-state">Loading...</p></div></main>
+    return <AppShellSkeleton />
   }
 
   if (!user) {
@@ -83,6 +102,7 @@ function ProtectedLayout() {
       <LoadingBar />
       <OfflineIndicator />
       <InstallPrompt />
+      <PWAUpdatePrompt />
       <TopBar />
       <main className="app-content">
         <Outlet />
@@ -121,3 +141,4 @@ export default function App() {
     </BrowserRouter>
   )
 }
+
