@@ -150,3 +150,6 @@ bin/
 obj/
 *.csproj.user
 appsettings.Development.json
+
+# Claude Code local settings
+.claude/settings.local.json
