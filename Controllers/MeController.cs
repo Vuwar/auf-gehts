@@ -3,7 +3,6 @@ using Api.DTOs.Responses;
 using Api.Mappings;
 using Api.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.OutputCaching;
 
 namespace Api.Controllers;
 
@@ -11,7 +10,6 @@ namespace Api.Controllers;
 public class MeController(UserService service, CurrentUserAccessor currentUser) : BaseController
 {
     [HttpGet]
-    [OutputCache(PolicyName = "PerUser")]
     public async Task<ActionResult<UserResponse>> Get()
     {
         // Reuse the accessor's cached/IMemoryCache-backed read. The UserSyncMiddleware

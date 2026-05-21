@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { api, type Week, type WeekDetail, type WordSet, type Tag } from '../api'
+import { api, type Week, type WeekDetail, type Tag } from '../api'
 import { useAuth } from '../auth'
 import EditWeekSheet from './EditWeekSheet'
-import CreateSetForWeekSheet from './CreateSetForWeekSheet'
-import AssignExistingSetSheet from './AssignExistingSetSheet'
+import EditTagSheet from './EditTagSheet'
 import CreateWeekSheet from './CreateWeekSheet'
-import ConfirmationDialog from './ConfirmationDialog'
 import { PageSkeleton } from './Skeletons'
 import { PenIcon } from './EditSetSheet'
+import StatusIcon from './StatusIcon'
 
 export default function Abenteuer() {
   const { weekSlug } = useParams<{ weekSlug?: string }>()
@@ -18,11 +17,9 @@ export default function Abenteuer() {
   const [detail, setDetail] = useState<WeekDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [editingWeek, setEditingWeek] = useState(false)
-  const [creatingSet, setCreatingSet] = useState(false)
-  const [assigningExisting, setAssigningExisting] = useState(false)
+  const [editingTag, setEditingTag] = useState<Tag | null>(null)
   const [creatingWeek, setCreatingWeek] = useState(false)
-  const [confirmDeleteSet, setConfirmDeleteSet] = useState<WordSet | null>(null)
-  const [deletingSet, setDeletingSet] = useState(false)
+  const [addingTag, setAddingTag] = useState(false)
   const nav = useNavigate()
 
   useEffect(() => {
@@ -44,25 +41,33 @@ export default function Abenteuer() {
     }
   }
 
-  const deleteSet = async () => {
-    if (!confirmDeleteSet) return
-    setDeletingSet(true)
+  const addTag = async () => {
+    if (!detail) return
+    const existing = new Set(detail.tags.map(t => t.tagNumber))
+    let n = 1
+    while (existing.has(n) && n <= 7) n++
+    if (n > 7) return
+    setAddingTag(true)
     try {
-      await api.deleteSet(confirmDeleteSet.id)
-      setConfirmDeleteSet(null)
+      await api.createTag(detail.id, { tagNumber: n, name: `Tag ${n}` })
       reload()
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Failed to add tag')
     } finally {
-      setDeletingSet(false)
+      setAddingTag(false)
     }
   }
 
   if (loading) return <PageSkeleton page={weekSlug ? 'detail' : 'abenteuer'} />
 
   if (weekSlug && detail) {
+    const tagsSorted = [...detail.tags].sort((a, b) => a.tagNumber - b.tagNumber)
+    const weekComplete = tagsSorted.length > 0 && tagsSorted.every(t => t.isCompleted)
+
     return (
       <div className="deck">
         <div>
-          <button onClick={() => nav('/abenteuer')} className="deck-btn">← All weeks</button>
+          <button onClick={() => nav('/abenteuer')} className="deck-btn offline-allow">← All weeks</button>
         </div>
         <div className="deck-header">
           <h1>{detail.isLocked && '🔒 '}Woche {detail.number}: {detail.title}</h1>
@@ -74,80 +79,56 @@ export default function Abenteuer() {
         </div>
         {detail.description && <p className="hint">{detail.description}</p>}
         {detail.isLocked && (
-          <p className="empty-state">🔒 Finish the previous Woche to unlock these Tage. You can preview but not start.</p>
+          <p className="empty-state">🔒 Finish the previous Woche to unlock these Tage.</p>
         )}
 
         <h2 className="section-title">Tage</h2>
-        {detail.tags.length === 0 && <p className="empty-state">No Tage yet.{isAdmin ? ' Add via Edit week.' : ''}</p>}
-        <ul className="deck-list">
-          {detail.tags.sort((a, b) => a.tagNumber - b.tagNumber).map(t => (
-            <TagRow key={t.id} tag={t} locked={detail.isLocked} onClick={() => !detail.isLocked && nav(`/tags/${t.id}`)} />
-          ))}
-        </ul>
-
-        <h2 className="section-title">Word sets</h2>
-        {detail.sets.length === 0 && <p className="empty-state">No sets yet.</p>}
-        <ul className="deck-list">
-          {detail.sets.map(s => (
-            <li key={s.id} className="deck-item">
-              <button onClick={() => nav(`/sets/${s.slug}`)} className="deck-item-main">
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  {progressIcon(s.progressStatus)}
-                  <span>{s.name}</span>
-                  {s.level && <span className="starter-level">{s.level}</span>}
-                  <span className="deck-item-count">· {s.wordCount} words</span>
-                </div>
-                {s.description && <div className="hint" style={{ marginTop: '4px' }}>{s.description}</div>}
-              </button>
-              {isAdmin && (
-                <button onClick={() => setConfirmDeleteSet(s)} className="deck-btn danger" aria-label="Delete set">×</button>
-              )}
-            </li>
-          ))}
-        </ul>
-        <ConfirmationDialog
-          open={!!confirmDeleteSet}
-          title="Delete set?"
-          message={`"${confirmDeleteSet?.name ?? 'This set'}" and its words will be permanently deleted.`}
-          confirmLabel="Delete set"
-          busy={deletingSet}
-          onCancel={() => setConfirmDeleteSet(null)}
-          onConfirm={deleteSet}
-        />
-
-        {isAdmin && (
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
-            <button onClick={() => setCreatingSet(true)} className="deck-btn primary">+ New set</button>
-            <button onClick={() => setAssigningExisting(true)} className="deck-btn">Assign existing</button>
-          </div>
+        {tagsSorted.length === 0 && (
+          <p className="empty-state">No Tage yet.{isAdmin ? ' Add one below.' : ''}</p>
         )}
+        <ul className="deck-list">
+          {tagsSorted.map((t, i) => {
+            const dayLocked = !detail.isLocked && i > 0 && !tagsSorted[i - 1].isCompleted
+            return (
+              <TagRow
+                key={t.id}
+                tag={t}
+                weekLocked={detail.isLocked}
+                dayLocked={dayLocked}
+                isAdmin={isAdmin}
+                onClick={() => nav(`/tags/${t.id}`)}
+                onEdit={() => setEditingTag(t)}
+              />
+            )
+          })}
+        </ul>
 
-        {detail.sets.length > 0 && (
+        {isAdmin && tagsSorted.length < 7 && (
           <button
-            onClick={() => nav(`/sets/weekly:${detail.number}`)}
-            className="deck-btn primary"
-            style={{ width: '100%', marginTop: '8px', justifyContent: 'space-between', display: 'flex' }}
+            onClick={addTag}
+            disabled={addingTag}
+            className="deck-btn"
+            style={{ width: '100%', marginTop: '8px' }}
           >
-            <span>View all weekly words</span>
-            <span aria-hidden>→</span>
+            {addingTag ? 'Adding...' : `+ Add Tag ${tagsSorted.length + 1}`}
           </button>
         )}
 
-        <h2 className="section-title">Reading texts</h2>
-        {detail.readingTexts.length === 0 && <p className="empty-state">No texts assigned to this week.</p>}
-        <ul className="deck-list">
-          {detail.readingTexts.map(t => (
-            <li key={t.id} className="deck-item">
-              <button onClick={() => nav(`/reader/${t.id}`)} className="deck-item-main">
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span>{t.title}</span>
-                  {t.level && <span className="starter-level">{t.level}</span>}
-                  <span className="deck-item-count">· {t.questionCount} questions · {t.charCount} chars</span>
-                </div>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <button
+          onClick={weekComplete ? () => nav(`/sets/weekly:${detail.number}`) : undefined}
+          disabled={!weekComplete}
+          className="deck-btn primary"
+          style={{
+            width: '100%',
+            marginTop: '16px',
+            justifyContent: 'space-between',
+            display: 'flex',
+            ...(!weekComplete ? { opacity: 0.45, pointerEvents: 'none' } : {}),
+          }}
+        >
+          <span>{!weekComplete && '🔒 '}View all weekly words</span>
+          <span aria-hidden>→</span>
+        </button>
 
         {editingWeek && (
           <EditWeekSheet
@@ -157,18 +138,13 @@ export default function Abenteuer() {
             onDeleted={() => nav('/abenteuer')}
           />
         )}
-        {creatingSet && (
-          <CreateSetForWeekSheet
+        {editingTag && (
+          <EditTagSheet
+            tag={editingTag}
             weekId={detail.id}
-            onClose={() => setCreatingSet(false)}
-            onCreated={reload}
-          />
-        )}
-        {assigningExisting && (
-          <AssignExistingSetSheet
-            weekId={detail.id}
-            onClose={() => setAssigningExisting(false)}
-            onAssigned={reload}
+            onClose={() => setEditingTag(null)}
+            onUpdated={() => { setEditingTag(null); reload() }}
+            onDeleted={() => { setEditingTag(null); reload() }}
           />
         )}
       </div>
@@ -202,11 +178,12 @@ export default function Abenteuer() {
           const num = w.tagCount > 0 ? w.completedTagCount : w.completedCount
           const pct = denom > 0 ? Math.round((num / denom) * 100) : 0
           const unitLabel = w.tagCount > 0 ? 'Tage' : 'sets'
+          const weekDone = denom > 0 && num === denom
           return (
             <button
               key={w.id}
               onClick={() => nav(`/abenteuer/woche-${w.number}`)}
-              className={`week-card ${w.isLocked ? 'week-card-locked' : ''}`}
+              className={`week-card ${w.isLocked ? 'week-card-locked' : ''} ${weekDone ? 'week-card--completed' : ''}`}
               style={w.isLocked ? { opacity: 0.55 } : {}}
             >
               <div className="week-card-num">{w.isLocked && '🔒 '}Woche {w.number}</div>
@@ -228,24 +205,67 @@ export default function Abenteuer() {
   )
 }
 
-function TagRow({ tag, locked, onClick }: { tag: Tag; locked: boolean; onClick: () => void }) {
-  const icon = locked ? '🔒' : tag.isCompleted ? '✓' : tag.completedStepsMask > 0 ? '◐' : '○'
+function TagRow({
+  tag,
+  weekLocked,
+  dayLocked,
+  isAdmin,
+  onClick,
+  onEdit,
+}: {
+  tag: Tag
+  weekLocked: boolean
+  dayLocked: boolean
+  isAdmin: boolean
+  onClick: () => void
+  onEdit: () => void
+}) {
+  const isLocked = weekLocked || dayLocked
+  const status = isLocked ? 'locked' : tag.isCompleted ? 'completed' : tag.completedStepsMask > 0 ? 'in-progress' : 'idle'
+
+  const liClass = [
+    'deck-item',
+    status === 'completed' ? 'deck-item--completed' : '',
+  ].filter(Boolean).join(' ')
+
+  const metaParts: string[] = []
+  if (tag.wordSetName && tag.wordCount != null) metaParts.push(`${tag.wordCount} words`)
+  if (tag.readingTextTitle) {
+    metaParts.push(`${tag.questionCount} Qs${tag.hasAudio ? ' 🎧' : ''}`)
+  }
+
   return (
-    <li className="deck-item" style={locked ? { opacity: 0.55 } : {}}>
-      <button onClick={onClick} className="deck-item-main" disabled={locked}>
+    <li
+      className={liClass}
+      style={isLocked ? { opacity: 0.45, pointerEvents: 'none' } : {}}
+    >
+      <StatusIcon status={status} />
+      <button
+        onClick={isLocked ? undefined : onClick}
+        className="deck-item-main"
+        disabled={isLocked}
+      >
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ color: tag.isCompleted ? 'var(--accent)' : undefined }}>{icon}</span>
           <strong>Tag {tag.tagNumber}: {tag.name}</strong>
-          {tag.wordSetName && <span className="deck-item-count">· {tag.wordCount ?? 0} words</span>}
-          {tag.readingTextTitle && <span className="deck-item-count">· {tag.questionCount} Qs {tag.hasAudio ? '🎧' : ''}</span>}
+          {metaParts.length > 0 && (
+            <span className="status-meta-pill">{metaParts.join(' · ')}</span>
+          )}
         </div>
       </button>
+      {isAdmin && !isLocked && (
+        <button onClick={e => { e.stopPropagation(); onEdit() }} className="edit-icon-btn" aria-label="Edit tag" style={{ flexShrink: 0 }}>
+          <PenIcon />
+        </button>
+      )}
     </li>
   )
 }
 
-function progressIcon(status: WordSet['progressStatus']) {
+function progressIcon(status: import('../api').WordSet['progressStatus']) {
   if (status === 'Completed') return <span style={{ color: 'var(--accent)' }}>✓</span>
   if (status === 'Active') return <span style={{ color: 'var(--accent)' }}>◐</span>
   return <span style={{ opacity: 0.4 }}>○</span>
 }
+
+// Keep export for any existing usages
+export { progressIcon }

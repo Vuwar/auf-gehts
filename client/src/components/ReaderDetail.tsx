@@ -143,7 +143,7 @@ export default function ReaderDetail() {
   return (
     <div className="deck">
       <div>
-        <button onClick={() => nav('/reader')} className="deck-btn">← All texts</button>
+        <button onClick={() => nav('/reader')} className="deck-btn offline-allow">← All texts</button>
       </div>
 
       <div className="deck-header">

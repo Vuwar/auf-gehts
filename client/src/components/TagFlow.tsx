@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { api, type TagDetail, type Word, type ReadingTextQuestion } from '../api'
+import { api, type Tag, type TagDetail, type Word, type ReadingTextQuestion } from '../api'
+import { useAuth } from '../auth'
 import { speakGerman, stopSpeaking, ttsAvailable } from '../tts'
 import AudioPlayer from './AudioPlayer'
 import { PageSkeleton } from './Skeletons'
+import EditTagSheet from './EditTagSheet'
+import CreateSetForWeekSheet from './CreateSetForWeekSheet'
+import AssignExistingSetSheet from './AssignExistingSetSheet'
+import { PenIcon } from './EditSetSheet'
+import StatusIcon from './StatusIcon'
 
 const STEP_LABELS = [
   '1. Neue Wörter',
@@ -22,11 +28,16 @@ type View = 'overview' | 'step'
 export default function TagFlow() {
   const { tagId } = useParams<{ tagId: string }>()
   const nav = useNavigate()
+  const { profile, refreshProfile } = useAuth()
+  const isAdmin = profile?.role === 'Admin'
   const [tag, setTag] = useState<TagDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<View>('overview')
   const [stepIndex, setStepIndex] = useState(0)
   const [completedMask, setCompletedMask] = useState(0)
+  const [editingTag, setEditingTag] = useState(false)
+  const [creatingSet, setCreatingSet] = useState(false)
+  const [assigningExisting, setAssigningExisting] = useState(false)
 
   useEffect(() => {
     if (!tagId) return
@@ -38,11 +49,20 @@ export default function TagFlow() {
     }).finally(() => setLoading(false))
   }, [tagId])
 
+  const reload = () => {
+    if (!tagId) return
+    api.getTag(tagId).then(t => {
+      setTag(t)
+      setCompletedMask(t.completedStepsMask)
+    })
+  }
+
   const completeStep = async (idx: number) => {
     if (!tag) return
     try {
       const r = await api.completeTagStep(tag.id, idx)
       setCompletedMask(r.completedStepsMask)
+      refreshProfile()
     } catch (e: any) {
       alert(e.message)
     }
@@ -72,21 +92,50 @@ export default function TagFlow() {
   if (tag.isLocked) {
     return (
       <div className="deck">
-        <button onClick={() => nav(`/abenteuer/woche-${tag.weekNumber}`)} className="deck-btn">← Woche {tag.weekNumber}</button>
+        <button onClick={() => nav(`/abenteuer/woche-${tag.weekNumber}`)} className="deck-btn offline-allow">← Woche {tag.weekNumber}</button>
         <div className="deck-header"><h1>🔒 {tag.name}</h1></div>
-        <p className="empty-state">Finish the previous Woche first.</p>
+        <p className="empty-state">Complete the previous Tag to unlock this one.</p>
       </div>
     )
   }
 
   if (view === 'overview') {
     return (
-      <Overview
-        tag={tag}
-        completedMask={completedMask}
-        onBack={() => nav(`/abenteuer/woche-${tag.weekNumber}`)}
-        onStart={startOrResume}
-      />
+      <>
+        <Overview
+          tag={tag}
+          completedMask={completedMask}
+          isAdmin={isAdmin}
+          onBack={() => nav(`/abenteuer/woche-${tag.weekNumber}`)}
+          onStart={startOrResume}
+          onEdit={() => setEditingTag(true)}
+          onCreateSet={() => setCreatingSet(true)}
+          onAssignExisting={() => setAssigningExisting(true)}
+        />
+        {editingTag && (
+          <EditTagSheet
+            tag={tagDetailToTag(tag)}
+            weekId={tag.weekId}
+            onClose={() => setEditingTag(false)}
+            onUpdated={() => { setEditingTag(false); reload() }}
+            onDeleted={() => nav(`/abenteuer/woche-${tag.weekNumber}`)}
+          />
+        )}
+        {creatingSet && (
+          <CreateSetForWeekSheet
+            weekId={tag.weekId}
+            onClose={() => setCreatingSet(false)}
+            onCreated={() => { setCreatingSet(false); reload() }}
+          />
+        )}
+        {assigningExisting && (
+          <AssignExistingSetSheet
+            weekId={tag.weekId}
+            onClose={() => setAssigningExisting(false)}
+            onAssigned={() => { setAssigningExisting(false); reload() }}
+          />
+        )}
+      </>
     )
   }
 
@@ -100,6 +149,25 @@ export default function TagFlow() {
   )
 }
 
+function tagDetailToTag(t: TagDetail): Tag {
+  return {
+    id: t.id,
+    weekId: t.weekId,
+    tagNumber: t.tagNumber,
+    name: t.name,
+    wordSetId: t.wordSet?.id ?? null,
+    wordSetName: t.wordSet?.name ?? null,
+    wordCount: t.wordSet?.wordCount ?? null,
+    readingTextId: t.readingText?.id ?? null,
+    readingTextTitle: t.readingText?.title ?? null,
+    questionCount: t.readingText?.questions.length ?? 0,
+    hasAudio: !!t.readingText?.audioUrl,
+    completedStepsMask: t.completedStepsMask,
+    lastStep: t.lastStep,
+    isCompleted: t.isCompleted,
+  }
+}
+
 function nextIncompleteStep(mask: number): number {
   for (let i = 0; i < TOTAL_STEPS; i++) {
     if ((mask & (1 << i)) === 0) return i
@@ -110,23 +178,32 @@ function nextIncompleteStep(mask: number): number {
 interface OverviewProps {
   tag: TagDetail
   completedMask: number
+  isAdmin: boolean
   onBack: () => void
   onStart: () => void
+  onEdit: () => void
+  onCreateSet: () => void
+  onAssignExisting: () => void
 }
 
-function Overview({ tag, completedMask, onBack, onStart }: OverviewProps) {
+function Overview({ tag, completedMask, isAdmin, onBack, onStart, onEdit, onCreateSet, onAssignExisting }: OverviewProps) {
   const isStarted = completedMask !== 0
   const isComplete = completedMask === ALL_MASK
   const btnLabel = isComplete ? 'Wiederholen' : isStarted ? 'Weiter' : 'Los gehts'
 
   return (
     <div className="deck">
-      <button onClick={onBack} className="deck-btn">← Woche {tag.weekNumber}</button>
+      <button onClick={onBack} className="deck-btn offline-allow">← Woche {tag.weekNumber}</button>
       <div className="deck-header">
         <div>
           <h1>Tag {tag.tagNumber}: {tag.name}</h1>
           <span className="deck-progress">{tag.weekTitle}</span>
         </div>
+        {isAdmin && (
+          <button onClick={onEdit} className="edit-icon-btn" aria-label="Edit tag">
+            <PenIcon />
+          </button>
+        )}
       </div>
       <p className="hint">⏱ ~15 Minuten</p>
 
@@ -134,9 +211,9 @@ function Overview({ tag, completedMask, onBack, onStart }: OverviewProps) {
         {STEP_LABELS.map((lbl, i) => {
           const done = (completedMask & (1 << i)) !== 0
           return (
-            <li key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', border: '1px solid var(--border, #ddd)', borderRadius: '8px', background: done ? 'var(--accent-soft, #e8f5e9)' : 'transparent' }}>
-              <span style={{ fontSize: '20px', minWidth: '24px' }}>{done ? '✓' : '○'}</span>
-              <span style={{ fontWeight: 500 }}>{lbl}</span>
+            <li key={i} className={`tag-step${done ? ' tag-step--done' : ''}`}>
+              <StatusIcon status={done ? 'completed' : 'idle'} />
+              <span className="tag-step-label">{lbl}</span>
             </li>
           )
         })}
@@ -145,6 +222,13 @@ function Overview({ tag, completedMask, onBack, onStart }: OverviewProps) {
       <button onClick={onStart} className="deck-btn primary" style={{ marginTop: '16px', width: '100%' }}>
         {btnLabel}
       </button>
+
+      {isAdmin && (
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
+          <button onClick={onCreateSet} className="deck-btn primary">+ New Set</button>
+          <button onClick={onAssignExisting} className="deck-btn">Assign Existing</button>
+        </div>
+      )}
     </div>
   )
 }
@@ -160,7 +244,7 @@ function StepView({ tag, stepIndex, onAdvance, onBack }: StepProps) {
   return (
     <div className="deck">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button onClick={onBack} className="deck-btn">← Overview</button>
+        <button onClick={onBack} className="deck-btn offline-allow">← Overview</button>
         <span className="hint">Step {stepIndex + 1} / {TOTAL_STEPS}</span>
       </div>
       <h2 className="section-title">{STEP_LABELS[stepIndex]}</h2>

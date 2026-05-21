@@ -5,6 +5,7 @@ import { useAuth } from '../auth'
 import ErrorView from './ErrorView'
 import CreateSetSheet from './CreateSetSheet'
 import { PageSkeleton } from './Skeletons'
+import StatusIcon from './StatusIcon'
 
 export default function Library() {
   const nav = useNavigate()
@@ -103,16 +104,21 @@ function Section({ title, sets, emptyMsg, onClick, collapsible, open, onToggle, 
 
 function SetRow({ set, onClick, showMineChip }: { set: WordSet; onClick: (s: WordSet) => void; showMineChip?: boolean }) {
   const isCompleted = set.progressStatus === 'Completed'
+  const isActive = set.progressStatus === 'Active'
   const rowClass = `deck-item deck-item--wordset${isCompleted ? ' deck-item--completed' : ''}`
+  const iconStatus = isCompleted ? 'completed' : isActive ? 'in-progress' : null
   return (
     <li className={rowClass}>
+      {iconStatus ? (
+        <StatusIcon status={iconStatus} />
+      ) : (
+        <span className="deck-item-icon" aria-hidden>
+          <WordSetIcon />
+        </span>
+      )}
       <button onClick={() => onClick(set)} className="deck-item-main">
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <span className="deck-item-icon" aria-hidden>
-            <WordSetIcon />
-          </span>
           <span>{set.name}</span>
-          {isCompleted && <span className="starter-level starter-level--accent" title="Completed">✓</span>}
           {set.isFavorite && <span className="starter-level" title="Favorited">♥</span>}
           {showMineChip && set.isOwner && <span className="starter-level" title="Your set">Mine</span>}
           {set.weekNumber && <span className="starter-level">W{set.weekNumber}</span>}

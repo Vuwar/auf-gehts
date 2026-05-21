@@ -3,11 +3,25 @@ import type { ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 
+function getInitialTheme(): 'dark' | 'light' {
+  try {
+    const stored = localStorage.getItem('theme')
+    if (stored === 'dark' || stored === 'light') return stored
+  } catch {}
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+}
+
 export default function UserMenu() {
   const { user, profile, signOut } = useAuth()
   const [open, setOpen] = useState(false)
+  const [theme, setTheme] = useState<'dark' | 'light'>(getInitialTheme)
   const ref = useRef<HTMLDivElement>(null)
   const nav = useNavigate()
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    try { localStorage.setItem('theme', theme) } catch {}
+  }, [theme])
 
   useEffect(() => {
     const onClickOutside = (e: MouseEvent) => {
@@ -47,6 +61,14 @@ export default function UserMenu() {
             </div>
           </div>
           <div className="user-menu-divider" />
+          <button
+            onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+            className="user-menu-item offline-allow"
+          >
+            {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
+            {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+          </button>
+          <div className="user-menu-divider" />
           <Link to="/profile" onClick={() => setOpen(false)} className="user-menu-item">
             <SettingsIcon /> Settings
           </Link>
@@ -58,7 +80,7 @@ export default function UserMenu() {
               <LogsIcon /> Logs & metrics
             </Link>
           )}
-          <button onClick={handleSignOut} className="user-menu-item">
+          <button onClick={handleSignOut} className="user-menu-item offline-allow">
             <SignOutIcon /> Sign out
           </button>
         </div>
@@ -70,12 +92,25 @@ export default function UserMenu() {
 export function StreakIndicator() {
   const { profile } = useAuth()
   const streak = profile?.currentStreak ?? 0
+
+  const todayStr = (() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })()
+
+  const maintainedToday = streak > 0 && profile?.lastActivityDate === todayStr
+  const atRisk = streak > 0 && !maintainedToday
+
+  const cls = `streak-badge ${streak === 0 ? 'streak-cold' : atRisk ? 'streak-at-risk' : ''}`
+  const title = maintainedToday
+    ? `${streak} day streak – maintained today!`
+    : atRisk
+    ? `${streak} day streak – study today to keep it!`
+    : 'No streak yet – study today!'
+
   return (
-    <span
-      className={`streak-badge ${streak > 0 ? '' : 'streak-cold'}`}
-      title={streak > 0 ? `${streak} day streak` : 'No streak yet - study today!'}
-    >
-      <FlameIcon active={streak > 0} /> {streak}
+    <span className={cls} title={title}>
+      <FlameIcon active={maintainedToday} /> {streak}
     </span>
   )
 }
@@ -94,6 +129,14 @@ function LogsIcon() {
 
 function SignOutIcon() {
   return <MenuIcon><path d="M10 17l5-5-5-5" /><path d="M15 12H3" /><path d="M21 4v16" /></MenuIcon>
+}
+
+function SunIcon() {
+  return <MenuIcon><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" /></MenuIcon>
+}
+
+function MoonIcon() {
+  return <MenuIcon><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></MenuIcon>
 }
 
 function FlameIcon({ active }: { active: boolean }) {

@@ -243,7 +243,7 @@ export default function CreateTextSheet({ defaultWeekId, onClose, onCreated }: P
               {error && <p style={{ color: 'var(--danger)', fontSize: '13px', margin: 0 }}>{error}</p>}
 
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'space-between', marginTop: '8px' }}>
-                <button onClick={() => setStep(1)} className="deck-btn">← Back</button>
+                <button onClick={() => setStep(1)} className="deck-btn offline-allow">← Back</button>
                 <button onClick={submit} disabled={saving} className="deck-btn primary">
                   {saving ? 'Publishing...' : 'Publish'}
                 </button>

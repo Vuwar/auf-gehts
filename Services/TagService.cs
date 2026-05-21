@@ -6,6 +6,7 @@ using Api.DTOs.Responses;
 using Api.Mappings;
 using Api.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Api.Services;
 
@@ -13,7 +14,8 @@ public class TagService(
     AppDbContext db,
     CurrentUserAccessor currentUser,
     AiService ai,
-    ReadingTextService readingService)
+    ReadingTextService readingService,
+    IMemoryCache cache)
 {
     public const int TotalSteps = 6;
     public const int AllStepsMask = (1 << TotalSteps) - 1;
@@ -178,17 +180,13 @@ public class TagService(
         }
 
         if (p.CompletedStepsMask == AllStepsMask && p.CompletedAt is null)
-        {
             p.CompletedAt = now;
-            await db.SaveChangesAsync();
-            await BumpStreakAsync(userId);
-        }
-        else
-        {
-            await db.SaveChangesAsync();
-        }
+
+        await db.SaveChangesAsync();
+        await BumpStreakAsync(userId);
         return p;
     }
+
 
     public async Task<bool> IsWeekLockedAsync(Guid weekId, Guid userId)
     {
@@ -272,5 +270,6 @@ public class TagService(
         if (user.CurrentStreak > user.LongestStreak) user.LongestStreak = user.CurrentStreak;
         user.LastActivityDate = today;
         await db.SaveChangesAsync();
+        CurrentUserAccessor.Invalidate(cache, userId);
     }
 }

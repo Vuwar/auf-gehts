@@ -22,7 +22,7 @@ export default function WordSetView() {
   })()
   const isCombined = combinedWeekNumber !== null
   const nav = useNavigate()
-  const { profile } = useAuth()
+  const { profile, refreshProfile } = useAuth()
   const canEdit = profile?.role !== 'ViewOnly'
   const isAdmin = profile?.role === 'Admin'
   const [set, setSet] = useState<WordSet | null>(null)
@@ -105,6 +105,7 @@ export default function WordSetView() {
     if (studiedFullSet && missed.size === 0 && learned.size === words.length && setId && set) {
       await setProgressApi('Completed')
       setSet({ ...set, progressStatus: 'Completed' })
+      refreshProfile()
     }
     setIndex(studyQueue.length) // summary
   }
@@ -153,7 +154,7 @@ export default function WordSetView() {
     return (
       <div className="deck">
         <div>
-          <button onClick={() => setView('list')} className="deck-btn">← Back to set</button>
+          <button onClick={() => setView('list')} className="deck-btn offline-allow">← Back to set</button>
         </div>
         <div className="deck-header">
           <h1>{set.name}</h1>
@@ -177,10 +178,10 @@ export default function WordSetView() {
             </h2>
             <div className="study-summary-actions">
               {missedCount > 0 && (
-                <button onClick={reviewMissed} className="deck-btn primary">Practice {missedCount} missed</button>
+                <button onClick={reviewMissed} className="deck-btn primary offline-allow">Practice {missedCount} missed</button>
               )}
-              <button onClick={restartAll} className="deck-btn">Study all again</button>
-              <button onClick={() => setView('list')} className="deck-btn">Done</button>
+              <button onClick={restartAll} className="deck-btn offline-allow">Study all again</button>
+              <button onClick={() => setView('list')} className="deck-btn offline-allow">Done</button>
             </div>
           </div>
         ) : (
@@ -229,7 +230,7 @@ export default function WordSetView() {
   return (
     <div className="deck">
       <div>
-        <button onClick={() => nav(-1)} className="deck-btn">← Back</button>
+        <button onClick={() => nav(-1)} className="deck-btn offline-allow">← Back</button>
       </div>
       <header className="set-header">
         <div className="set-header-top">

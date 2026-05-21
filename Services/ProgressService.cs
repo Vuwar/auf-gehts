@@ -1,9 +1,10 @@
 using Api.Models;
 using Api.Repositories;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Api.Services;
 
-public class ProgressService(IProgressRepository repo, IUserRepository userRepo)
+public class ProgressService(IProgressRepository repo, IUserRepository userRepo, IMemoryCache cache)
 {
     public async Task<UserSetProgress> SetStatusAsync(Guid userId, Guid setId, ProgressStatus status)
     {
@@ -26,6 +27,7 @@ public class ProgressService(IProgressRepository repo, IUserRepository userRepo)
         if (user.CurrentStreak > user.LongestStreak) user.LongestStreak = user.CurrentStreak;
         user.LastActivityDate = today;
         await userRepo.SaveAsync();
+        CurrentUserAccessor.Invalidate(cache, userId);
     }
 
     public Task<List<UserSetProgress>> GetActiveAsync(Guid userId) =>

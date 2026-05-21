@@ -829,17 +829,48 @@
   opacity: 0.55;
 }
 
-.deck-item--wordset.deck-item--completed {
-  border-left: 3px solid var(--accent);
+.deck-item--completed {
+  border-left: 3px solid var(--status-purple);
+  background: var(--bg-elev);
+  border-color: var(--border);
+  border-left-color: var(--status-purple);
 }
 
-.deck-item--wordset.deck-item--completed .deck-item-icon {
-  color: var(--accent);
+.deck-item--completed .deck-item-main {
+  color: var(--text);
+}
+
+.deck-item--completed strong {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.deck-item--completed .edit-icon-btn {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.deck-item--completed:hover .edit-icon-btn,
+.deck-item--completed:focus-within .edit-icon-btn {
   opacity: 1;
 }
 
-.deck-item--wordset.deck-item--completed .deck-item-main {
-  opacity: 0.8;
+.deck-item--wordset.deck-item--completed .deck-item-icon {
+  color: var(--status-purple);
+  opacity: 1;
+}
+
+.status-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 500;
+  background: color-mix(in srgb, var(--status-purple) 14%, transparent);
+  color: var(--status-purple);
+  white-space: nowrap;
 }
 
 .starter-level--accent {
@@ -848,34 +879,41 @@
   border-color: var(--accent-border, var(--accent));
 }
 
-.offline-pill {
-  position: fixed;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 1000;
-  display: inline-flex;
+/* ── Offline banner ─────────────────────────────────────────── */
+.offline-banner {
+  display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
-  border-radius: 999px;
+  padding: 8px 16px;
   font-size: 12px;
-  border: 1px solid var(--border);
-  background: var(--bg-elev);
+  font-weight: 500;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--danger, #e85a5a) 12%, var(--bg-elev));
   color: var(--text-h);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-.offline-pill .offline-dot {
-  width: 8px;
-  height: 8px;
+.offline-banner.syncing {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elev));
+}
+
+.offline-banner .offline-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--danger, #e85a5a);
 }
 
-.offline-pill.syncing .offline-dot {
+.offline-banner.syncing .offline-dot {
   background: var(--accent);
   animation: pulse-dot 1s ease-in-out infinite;
+}
+
+/* ── Global offline button disable ─────────────────────────── */
+html[data-offline="true"] button:not(.offline-allow):not(.sheet-close) {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 @keyframes pulse-dot {
@@ -1804,6 +1842,12 @@
   border-color: var(--border);
   color: var(--text);
   opacity: 0.7;
+}
+
+.streak-badge.streak-at-risk {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-h);
 }
 
 .streak-icon {
@@ -3426,6 +3470,43 @@ input[type="checkbox"] {
   cursor: pointer;
   color: var(--text-h);
   transition: all 0.15s;
+}
+
+.week-card--completed {
+  border-left: 3px solid var(--status-purple);
+  background: var(--bg-elev);
+  border-color: var(--border);
+  border-left-color: var(--status-purple);
+}
+
+.week-card--completed .week-card-title {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.tag-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+}
+
+.tag-step--done {
+  border-left: 3px solid var(--status-purple);
+  border-color: var(--border);
+  border-left-color: var(--status-purple);
+}
+
+.tag-step--done .tag-step-label {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.tag-step-label {
+  font-weight: 500;
 }
 
 .week-card:active {
