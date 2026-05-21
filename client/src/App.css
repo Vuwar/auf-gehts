@@ -324,16 +324,81 @@
 
 .deck-btn.danger {
   color: var(--danger);
-  border-color: transparent;
-  background: transparent;
-  padding: 8px 12px;
-  min-height: 36px;
+  border-color: rgba(239, 68, 68, 0.3);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
 }
 
 .deck-btn.danger:hover {
   border-color: var(--danger);
   color: var(--danger);
   background: rgba(239, 68, 68, 0.08);
+}
+
+.edit-action-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 12px 0 0;
+  margin-top: 8px;
+  background: var(--bg-elev);
+}
+
+.edit-action-row .deck-btn {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 8px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.edit-delete-btn {
+  border-color: rgba(239, 68, 68, 0.42);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
+
+.edit-delete-btn:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+
+.edit-save-btn {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.edit-save-btn:hover:not(:disabled) {
+  color: white;
+  filter: brightness(1.05);
+}
+
+.edit-icon-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+}
+
+.edit-icon-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.edit-icon-btn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .deck-btn.danger-solid {

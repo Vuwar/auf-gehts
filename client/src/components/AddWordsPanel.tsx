@@ -59,7 +59,7 @@ export default function AddWordsPanel({ onAddSingle, onBulkAdd, bufferCount }: P
         </div>
       )}
       {typeof bufferCount === 'number' && bufferCount > 0 && (
-        <p className="hint">{bufferCount} word{bufferCount === 1 ? '' : 's'} queued — will save on create</p>
+        <p className="hint">{bufferCount} word{bufferCount === 1 ? '' : 's'} queued - press Save to commit</p>
       )}
     </div>
   )

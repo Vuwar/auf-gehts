@@ -8,6 +8,7 @@ import AssignExistingSetSheet from './AssignExistingSetSheet'
 import CreateWeekSheet from './CreateWeekSheet'
 import ConfirmationDialog from './ConfirmationDialog'
 import { PageSkeleton } from './Skeletons'
+import { PenIcon } from './EditSetSheet'
 
 export default function Abenteuer() {
   const { weekSlug } = useParams<{ weekSlug?: string }>()
@@ -66,7 +67,9 @@ export default function Abenteuer() {
         <div className="deck-header">
           <h1>{detail.isLocked && '🔒 '}Woche {detail.number}: {detail.title}</h1>
           {isAdmin && (
-            <button onClick={() => setEditingWeek(true)} className="deck-btn">Edit week</button>
+            <button onClick={() => setEditingWeek(true)} className="edit-icon-btn" aria-label="Edit week">
+              <PenIcon />
+            </button>
           )}
         </div>
         {detail.description && <p className="hint">{detail.description}</p>}

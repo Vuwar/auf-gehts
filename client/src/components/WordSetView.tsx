@@ -252,7 +252,7 @@ export default function WordSetView() {
             {!isCombined && (set.isOwner || isAdmin) && canEdit && (
               <button
                 onClick={() => setEditOpen(true)}
-                className="bookmark-btn"
+                className="edit-icon-btn"
                 aria-label="Edit set"
               >
                 <PenIcon />

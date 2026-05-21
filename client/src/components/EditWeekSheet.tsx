@@ -44,15 +44,42 @@ export default function EditWeekSheet({ week, onClose, onUpdated, onDeleted }: P
     setTags(t)
   }
 
+  const hasWeekChanges =
+    number !== week.number ||
+    title.trim() !== week.title ||
+    description.trim() !== (week.description ?? '') ||
+    tags.some(tag => {
+      const original = (week.tags ?? []).find(t => t.id === tag.id)
+      return !original ||
+        tag.name !== original.name ||
+        tag.wordSetId !== original.wordSetId ||
+        tag.readingTextId !== original.readingTextId
+    })
+
   const save = async () => {
     setSaving(true)
     setError(null)
     try {
       await api.updateWeek(week.id, { number, title: title.trim(), description: description.trim() || undefined })
+      for (const tag of tags) {
+        const original = (week.tags ?? []).find(t => t.id === tag.id)
+        if (!original) continue
+        const patch: { name?: string; wordSetId?: string | null; readingTextId?: string | null; clearWordSet?: boolean; clearReadingText?: boolean } = {}
+        if (tag.name !== original.name) patch.name = tag.name
+        if (tag.wordSetId !== original.wordSetId) {
+          if (tag.wordSetId) patch.wordSetId = tag.wordSetId
+          else patch.clearWordSet = true
+        }
+        if (tag.readingTextId !== original.readingTextId) {
+          if (tag.readingTextId) patch.readingTextId = tag.readingTextId
+          else patch.clearReadingText = true
+        }
+        if (Object.keys(patch).length > 0) await api.updateTag(tag.id, patch)
+      }
       onUpdated()
       onClose()
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError(errorMessage(e))
     } finally {
       setSaving(false)
     }
@@ -62,8 +89,8 @@ export default function EditWeekSheet({ week, onClose, onUpdated, onDeleted }: P
     try {
       await api.deleteWeek(week.id)
       onDeleted()
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError(errorMessage(e))
     }
   }
 
@@ -76,8 +103,8 @@ export default function EditWeekSheet({ week, onClose, onUpdated, onDeleted }: P
       await api.createTag(week.id, { tagNumber: n, name: `Tag ${n}` })
       await reloadTags()
       onUpdated()
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError(errorMessage(e))
     }
   }
 
@@ -89,19 +116,6 @@ export default function EditWeekSheet({ week, onClose, onUpdated, onDeleted }: P
       await reloadTags()
       onUpdated()
       setConfirmTag(null)
-    } finally {
-      setTagBusy(null)
-    }
-  }
-
-  const updateTagField = async (tag: Tag, patch: { name?: string; wordSetId?: string | null; readingTextId?: string | null; clearWordSet?: boolean; clearReadingText?: boolean }) => {
-    setTagBusy(tag.id)
-    try {
-      await api.updateTag(tag.id, patch)
-      await reloadTags()
-      onUpdated()
-    } catch (e: any) {
-      setError(e.message)
     } finally {
       setTagBusy(null)
     }
@@ -132,8 +146,8 @@ export default function EditWeekSheet({ week, onClose, onUpdated, onDeleted }: P
       await api.updateTag(tag.id, { readingTextId: rt.id })
       await reloadTags()
       onUpdated()
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError(errorMessage(e))
     } finally {
       setGenerating(null)
     }
@@ -160,9 +174,6 @@ export default function EditWeekSheet({ week, onClose, onUpdated, onDeleted }: P
 
             {error && <p style={{ color: 'var(--danger)', fontSize: '13px', margin: 0 }}>{error}</p>}
 
-            <button onClick={save} disabled={saving || !title.trim()} className="deck-btn primary">
-              {saving ? 'Saving...' : 'Save'}
-            </button>
           </div>
 
           <h3 className="section-title" style={{ marginTop: '16px' }}>Tags (daily sessions)</h3>
@@ -180,7 +191,6 @@ export default function EditWeekSheet({ week, onClose, onUpdated, onDeleted }: P
                 type="text"
                 value={tag.name}
                 onChange={e => setTags(tags.map(t => t.id === tag.id ? { ...t, name: e.target.value } : t))}
-                onBlur={e => { if (e.target.value !== tag.name) updateTagField(tag, { name: e.target.value }) }}
                 placeholder="Tag name"
               />
 
@@ -189,8 +199,7 @@ export default function EditWeekSheet({ week, onClose, onUpdated, onDeleted }: P
                 value={tag.wordSetId ?? ''}
                 onChange={e => {
                   const v = e.target.value
-                  if (!v) updateTagField(tag, { clearWordSet: true })
-                  else updateTagField(tag, { wordSetId: v })
+                  setTags(tags.map(t => t.id === tag.id ? { ...t, wordSetId: v || null, wordSetName: availableSets.find(s => s.id === v)?.name ?? null } : t))
                 }}
                 disabled={tagBusy === tag.id}
               >
@@ -204,7 +213,13 @@ export default function EditWeekSheet({ week, onClose, onUpdated, onDeleted }: P
               {tag.readingTextId ? (
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                   <span className="hint">{tag.readingTextTitle ?? 'Assigned'} · {tag.questionCount} Qs {tag.hasAudio ? '🎧' : ''}</span>
-                  <button onClick={() => updateTagField(tag, { clearReadingText: true })} className="deck-btn" disabled={tagBusy === tag.id}>Unassign</button>
+                  <button
+                    onClick={() => setTags(tags.map(t => t.id === tag.id ? { ...t, readingTextId: null, readingTextTitle: null, questionCount: 0, hasAudio: false } : t))}
+                    className="deck-btn"
+                    disabled={tagBusy === tag.id}
+                  >
+                    Unassign
+                  </button>
                 </div>
               ) : (
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -227,9 +242,12 @@ export default function EditWeekSheet({ week, onClose, onUpdated, onDeleted }: P
             </button>
           )}
 
-          <button onClick={() => setConfirmingDelete(true)} className="deck-btn danger" style={{ marginTop: '16px', width: '100%' }}>
-            Delete week
-          </button>
+          <div className="edit-action-row">
+            <button onClick={() => setConfirmingDelete(true)} className="deck-btn edit-delete-btn">Delete week</button>
+            <button onClick={save} disabled={saving || !title.trim() || !hasWeekChanges} className="deck-btn edit-save-btn">
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
           <ConfirmationDialog
             open={confirmingDelete}
             title="Delete week?"
@@ -251,4 +269,8 @@ export default function EditWeekSheet({ week, onClose, onUpdated, onDeleted }: P
       </div>
     </div>
   )
+}
+
+function errorMessage(e: unknown) {
+  return e instanceof Error ? e.message : 'Something went wrong'
 }

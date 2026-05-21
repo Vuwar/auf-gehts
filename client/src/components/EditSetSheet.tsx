@@ -18,16 +18,18 @@ export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWord
   const isAdmin = profile?.role === 'Admin'
   const [weeks, setWeeks] = useState<Week[]>([])
   const [name, setName] = useState(set.name)
-  const [savingName, setSavingName] = useState(false)
   const [description, setDescription] = useState(set.description ?? '')
-  const [savingDescription, setSavingDescription] = useState(false)
   const [isPublic, setIsPublic] = useState(set.isPublic)
-  const [togglingPublic, setTogglingPublic] = useState(false)
+  const [isOfficial, setIsOfficial] = useState(set.isOfficial)
+  const [weekId, setWeekId] = useState(set.weekId ?? '')
+  const [saving, setSaving] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [wordsOpen, setWordsOpen] = useState(false)
+  const [wordDrafts, setWordDrafts] = useState(words)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [confirmWord, setConfirmWord] = useState<Word | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -43,70 +45,70 @@ export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWord
     if (isAdmin) api.listWeeks().then(setWeeks).catch(() => {})
   }, [isAdmin])
 
-  const setWeek = async (weekId: string) => {
-    const updated = weekId
-      ? await api.updateSet(set.id, { weekId })
-      : await api.updateSet(set.id, { clearWeek: true })
-    onSetUpdated(updated)
-  }
+  const hasSetChanges =
+    name.trim() !== set.name ||
+    description.trim() !== (set.description ?? '') ||
+    isPublic !== set.isPublic ||
+    (isAdmin && isOfficial !== set.isOfficial) ||
+    (isAdmin && isOfficial && weekId !== (set.weekId ?? '')) ||
+    (isAdmin && !isOfficial && set.weekId !== null) ||
+    wordDrafts.some(draft => {
+      const original = words.find(w => w.id === draft.id)
+      return !original || (draft.front.trim() !== original.front || draft.back.trim() !== original.back)
+    })
 
-  const toggleOfficial = async () => {
-    const updated = await api.updateSet(set.id, { isOfficial: !set.isOfficial })
-    onSetUpdated(updated)
-  }
-
-  const saveName = async () => {
-    if (name.trim() === set.name || !name.trim()) return
-    setSavingName(true)
+  const saveSet = async () => {
+    if (!name.trim()) return
+    setSaving(true)
+    setError(null)
     try {
-      const updated = await api.updateSet(set.id, { name: name.trim() })
+      const updated = await api.updateSet(set.id, {
+        name: name.trim(),
+        description: description.trim(),
+        isPublic,
+        ...(isAdmin ? {
+          isOfficial,
+          weekId: isOfficial && weekId ? weekId : null,
+          clearWeek: !isOfficial || !weekId,
+        } : {}),
+      })
+      await Promise.all(wordDrafts.map(draft => {
+        const original = words.find(w => w.id === draft.id)
+        if (!original) return api.addWord(set.id, draft.front.trim(), draft.back.trim(), draft.context ?? undefined)
+        if (draft.front.trim() === original.front && draft.back.trim() === original.back) return draft
+        return api.updateWord(draft.id, draft.front.trim(), draft.back.trim(), draft.context ?? undefined)
+      }))
+      const updatedWords = await api.listWords(set.id)
       onSetUpdated(updated)
+      onWordsChanged(updatedWords)
+      onClose()
+    } catch (e: unknown) {
+      setError(errorMessage(e))
     } finally {
-      setSavingName(false)
+      setSaving(false)
     }
   }
 
-  const saveDescription = async () => {
-    const next = description.trim()
-    if (next === (set.description ?? '')) return
-    setSavingDescription(true)
-    try {
-      const updated = await api.updateSet(set.id, { description: next })
-      onSetUpdated(updated)
-    } finally {
-      setSavingDescription(false)
-    }
+  const addWord = (front: string, back: string) => {
+    setWordDrafts([...wordDrafts, draftWord(set.id, front, back)])
   }
 
-  const togglePublic = async () => {
-    setTogglingPublic(true)
-    try {
-      const next = !isPublic
-      const updated = await api.updateSet(set.id, { isPublic: next })
-      setIsPublic(next)
-      onSetUpdated(updated)
-    } finally {
-      setTogglingPublic(false)
-    }
-  }
-
-  const addWord = async (front: string, back: string) => {
-    const w = await api.addWord(set.id, front, back)
-    onWordsChanged([...words, w])
-  }
-
-  const bulkAdd = async (items: { front: string; back: string }[]) => {
-    await api.bulkAddWords(set.id, items)
-    const fresh = await api.listWords(set.id)
-    onWordsChanged(fresh)
+  const bulkAdd = (items: { front: string; back: string }[]) => {
+    setWordDrafts([...wordDrafts, ...items.map(item => draftWord(set.id, item.front, item.back))])
   }
 
   const deleteWord = async () => {
     if (!confirmWord) return
+    if (isDraftWord(confirmWord)) {
+      setWordDrafts(wordDrafts.filter(w => w.id !== confirmWord.id))
+      setConfirmWord(null)
+      return
+    }
     setDeleting(true)
     try {
       await api.deleteWord(confirmWord.id)
       onWordsChanged(words.filter(w => w.id !== confirmWord.id))
+      setWordDrafts(wordDrafts.filter(w => w.id !== confirmWord.id))
       setConfirmWord(null)
     } finally {
       setDeleting(false)
@@ -133,36 +135,19 @@ export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWord
 
         <div className="sheet-body">
           <div className="form-row">
-            <span className="card-label">Change name</span>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <input type="text" value={name} onChange={e => setName(e.target.value)} style={{ flex: 1 }} />
-              <button onClick={saveName} disabled={savingName || name.trim() === set.name || !name.trim()} className="deck-btn primary">
-                {savingName ? '...' : 'Save'}
-              </button>
-            </div>
-          </div>
+            <span className="card-label">Name</span>
+            <input type="text" value={name} onChange={e => setName(e.target.value)} />
 
-          <div className="form-row">
             <span className="card-label">Description</span>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <input
-                type="text"
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                placeholder="Add a short description"
-                style={{ flex: 1 }}
-              />
-              <button
-                onClick={saveDescription}
-                disabled={savingDescription || description.trim() === (set.description ?? '')}
-                className="deck-btn primary"
-              >
-                {savingDescription ? '...' : 'Save'}
-              </button>
-            </div>
+            <input
+              type="text"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Add a short description"
+            />
           </div>
 
-          <button onClick={togglePublic} disabled={togglingPublic} className="visibility-toggle">
+          <button onClick={() => setIsPublic(!isPublic)} type="button" className="visibility-toggle">
             <div className="visibility-toggle-text">
               <span className="visibility-toggle-title">{isPublic ? 'Public' : 'Private'}</span>
               <span className="visibility-toggle-sub">{isPublic ? 'Anyone can see this set' : 'Only you can see this set'}</span>
@@ -176,20 +161,20 @@ export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWord
             <div className="form-row" style={{ borderColor: 'var(--accent-border)' }}>
               <span className="card-label" style={{ color: 'var(--accent)' }}>Admin</span>
 
-              <button onClick={toggleOfficial} type="button" className="visibility-toggle">
+              <button onClick={() => setIsOfficial(!isOfficial)} type="button" className="visibility-toggle">
                 <div className="visibility-toggle-text">
                   <span className="visibility-toggle-title">Official set</span>
                   <span className="visibility-toggle-sub">Shows in Abenteuer week page</span>
                 </div>
-                <span className={`visibility-switch ${set.isOfficial ? 'on' : ''}`}>
+                <span className={`visibility-switch ${isOfficial ? 'on' : ''}`}>
                   <span className="visibility-switch-knob" />
                 </span>
               </button>
 
-              {set.isOfficial && (
+              {isOfficial && (
                 <>
                   <span className="card-label">Assign to week</span>
-                  <select value={set.weekId ?? ''} onChange={e => setWeek(e.target.value)}>
+                  <select value={weekId} onChange={e => setWeekId(e.target.value)}>
                     <option value="">Choose a week</option>
                     {weeks.map(w => <option key={w.id} value={w.id}>Woche {w.number}: {w.title}</option>)}
                   </select>
@@ -203,27 +188,24 @@ export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWord
             <ChevronIcon open={addOpen} />
           </button>
           {addOpen && (
-            <AddWordsPanel onAddSingle={addWord} onBulkAdd={bulkAdd} />
+            <AddWordsPanel onAddSingle={addWord} onBulkAdd={bulkAdd} bufferCount={wordDrafts.filter(isDraftWord).length} />
           )}
 
           <button onClick={() => setWordsOpen(!wordsOpen)} className="collapse-toggle sticky-toggle">
-            <span>Words ({words.length})</span>
+            <span>Words ({wordDrafts.length})</span>
             <ChevronIcon open={wordsOpen} />
           </button>
           {wordsOpen && (
             <div className="collapse-content">
-              {words.length === 0 ? (
+              {wordDrafts.length === 0 ? (
                 <p className="empty-state" style={{ padding: '12px' }}>No words yet.</p>
               ) : (
                 <ul className="word-list">
-                  {words.map(w => (
+                  {wordDrafts.map(w => (
                     <EditableWordRow
                       key={w.id}
                       word={w}
-                      onSave={async (front, back) => {
-                        const updated = await api.updateWord(w.id, front, back, w.context ?? undefined)
-                        onWordsChanged(words.map(x => x.id === w.id ? updated : x))
-                      }}
+                      onChange={(front, back) => setWordDrafts(wordDrafts.map(x => x.id === w.id ? { ...x, front, back } : x))}
                       onDelete={() => setConfirmWord(w)}
                     />
                   ))}
@@ -232,11 +214,18 @@ export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWord
             </div>
           )}
 
-          {set.name === 'My Vocabulary' ? null : (
-            <button onClick={() => setConfirmingDelete(true)} className="deck-btn danger" style={{ marginTop: '8px', width: '100%', display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
+          {error && <p style={{ color: 'var(--danger)', fontSize: '13px', margin: 0 }}>{error}</p>}
+
+          <div className="edit-action-row">
+            {set.name === 'My Vocabulary' ? <span /> : (
+            <button onClick={() => setConfirmingDelete(true)} className="deck-btn edit-delete-btn">
               <TrashIcon /> Delete set
             </button>
-          )}
+            )}
+            <button onClick={saveSet} disabled={saving || !name.trim() || !hasSetChanges} className="deck-btn edit-save-btn">
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
           <ConfirmationDialog
             open={confirmingDelete}
             title="Delete set?"
@@ -261,22 +250,15 @@ export default function EditSetSheet({ set, words, onClose, onSetUpdated, onWord
   )
 }
 
-function EditableWordRow({ word, onSave, onDelete }: { word: Word; onSave: (front: string, back: string) => Promise<void>; onDelete: () => void }) {
+function EditableWordRow({ word, onChange, onDelete }: { word: Word; onChange: (front: string, back: string) => void; onDelete: () => void }) {
   const [editing, setEditing] = useState(false)
   const [front, setFront] = useState(word.front)
   const [back, setBack] = useState(word.back)
-  const [saving, setSaving] = useState(false)
 
-  const save = async () => {
+  const apply = () => {
     if (!front.trim() || !back.trim()) return
-    if (front === word.front && back === word.back) { setEditing(false); return }
-    setSaving(true)
-    try {
-      await onSave(front.trim(), back.trim())
-      setEditing(false)
-    } finally {
-      setSaving(false)
-    }
+    onChange(front.trim(), back.trim())
+    setEditing(false)
   }
 
   const cancel = () => {
@@ -290,7 +272,7 @@ function EditableWordRow({ word, onSave, onDelete }: { word: Word; onSave: (fron
           <input value={front} onChange={e => setFront(e.target.value)} />
           <input value={back} onChange={e => setBack(e.target.value)} />
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={save} disabled={saving} className="deck-btn primary" style={{ flex: 1 }}>{saving ? '...' : 'Save'}</button>
+            <button onClick={apply} className="deck-btn primary" style={{ flex: 1 }}>Done</button>
             <button onClick={cancel} className="deck-btn">Cancel</button>
           </div>
         </div>
@@ -317,6 +299,26 @@ function ChevronIcon({ open }: { open: boolean }) {
       <polyline points="6 9 12 15 18 9" />
     </svg>
   )
+}
+
+function errorMessage(e: unknown) {
+  return e instanceof Error ? e.message : 'Something went wrong'
+}
+
+function draftWord(wordSetId: string, front: string, back: string): Word {
+  return {
+    id: `draft:${crypto.randomUUID()}`,
+    wordSetId,
+    front,
+    back,
+    context: null,
+    displayOrder: 0,
+    createdAt: new Date().toISOString(),
+  }
+}
+
+function isDraftWord(word: Word) {
+  return word.id.startsWith('draft:')
 }
 
 export function PenIcon() {

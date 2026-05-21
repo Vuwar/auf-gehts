@@ -33,15 +33,20 @@ export default function EditUserSheet({ user, currentUserId, onClose, onUpdated,
     }
   }, [onClose])
 
-  const pickRole = async (next: UserRole) => {
+  const pickRole = (next: UserRole) => {
     if (next === role || isSelf) return
+    setRole(next)
+  }
+
+  const save = async () => {
+    if (role === user.role || isSelf) return
     setSaving(true)
     try {
-      const updated = await api.adminSetUserRole(user.id, next)
-      setRole(next)
+      const updated = await api.adminSetUserRole(user.id, role)
       onUpdated(updated)
-    } catch (e: any) {
-      alert(e.message)
+      onClose()
+    } catch (e: unknown) {
+      alert(errorMessage(e))
     } finally {
       setSaving(false)
     }
@@ -52,8 +57,8 @@ export default function EditUserSheet({ user, currentUserId, onClose, onUpdated,
     try {
       await api.adminDeleteUser(user.id)
       onDeleted(user.id)
-    } catch (e: any) {
-      alert(e.message)
+    } catch (e: unknown) {
+      alert(errorMessage(e))
     } finally {
       setDeleting(false)
     }
@@ -97,9 +102,14 @@ export default function EditUserSheet({ user, currentUserId, onClose, onUpdated,
           {isSelf && <p className="hint">You cannot change your own role or delete yourself.</p>}
 
           {!isSelf && (
-            <button onClick={() => setConfirmingDelete(true)} className="deck-btn danger" style={{ marginTop: '8px', width: '100%', display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
-              <TrashIcon /> Delete user
-            </button>
+            <div className="edit-action-row">
+              <button onClick={() => setConfirmingDelete(true)} className="deck-btn edit-delete-btn">
+                <TrashIcon /> Delete user
+              </button>
+              <button onClick={save} disabled={saving || role === user.role} className="deck-btn edit-save-btn">
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
           )}
           <ConfirmationDialog
             open={confirmingDelete}
@@ -126,4 +136,8 @@ function TrashIcon() {
       <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
     </svg>
   )
+}
+
+function errorMessage(e: unknown) {
+  return e instanceof Error ? e.message : 'Something went wrong'
 }
