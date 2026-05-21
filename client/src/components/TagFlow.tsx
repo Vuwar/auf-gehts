@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api, type Tag, type TagDetail, type Word, type ReadingTextQuestion } from '../api'
 import { useAuth } from '../auth'
 import { speakGerman, stopSpeaking, ttsAvailable } from '../tts'
 import AudioPlayer from './AudioPlayer'
+import { buildWordTimings, wordAtTime } from '../wordSync'
 import { PageSkeleton } from './Skeletons'
 import EditTagSheet from './EditTagSheet'
 import CreateSetForWeekSheet from './CreateSetForWeekSheet'
@@ -412,6 +413,34 @@ function Hoeren({ audioUrl, onDone }: { audioUrl: string | null; onDone: () => v
 }
 
 function Lesen({ text, words, onDone }: { text: TagDetail['readingText']; words: Word[]; onDone: () => void }) {
+  const [audioDuration, setAudioDuration] = useState(0)
+  const wordTimingsRef = useRef<number[]>([])
+  const textRef = useRef<HTMLDivElement>(null)
+  const lastSyncIdxRef = useRef(-1)
+  const wordSet = useMemo(() => new Set(words.map(w => normalizeWord(w.front))), [words])
+
+  useEffect(() => {
+    wordTimingsRef.current = text?.content && audioDuration > 0
+      ? buildWordTimings(text.content, audioDuration) : []
+    if (lastSyncIdxRef.current >= 0) {
+      textRef.current?.querySelector<HTMLElement>(`[data-wi="${lastSyncIdxRef.current}"]`)?.removeAttribute('data-synced')
+    }
+    lastSyncIdxRef.current = -1
+  }, [text?.content, audioDuration])
+
+  const handleTimeUpdate = useCallback((t: number) => {
+    const newIdx = wordAtTime(wordTimingsRef.current, t)
+    if (newIdx === lastSyncIdxRef.current) return
+    const container = textRef.current
+    if (container) {
+      if (lastSyncIdxRef.current >= 0)
+        container.querySelector<HTMLElement>(`[data-wi="${lastSyncIdxRef.current}"]`)?.removeAttribute('data-synced')
+      if (newIdx >= 0)
+        container.querySelector<HTMLElement>(`[data-wi="${newIdx}"]`)?.setAttribute('data-synced', '')
+    }
+    lastSyncIdxRef.current = newIdx
+  }, [])
+
   if (!text) {
     return (
       <div>
@@ -420,12 +449,17 @@ function Lesen({ text, words, onDone }: { text: TagDetail['readingText']; words:
       </div>
     )
   }
-  const wordSet = useMemo(() => new Set(words.map(w => normalizeWord(w.front))), [words])
   return (
     <div className="form-row">
       <p className="hint">Read along while audio plays. Today's words are highlighted.</p>
-      {text.audioUrl && <AudioPlayer src={text.audioUrl} />}
-      <div className="reader-text" style={{ padding: '16px', border: '1px solid var(--border, #ddd)', borderRadius: '8px', lineHeight: 1.7 }}>
+      {text.audioUrl && (
+        <AudioPlayer
+          src={text.audioUrl}
+          onTimeUpdate={handleTimeUpdate}
+          onDurationChange={setAudioDuration}
+        />
+      )}
+      <div ref={textRef} className="reader-text" style={{ padding: '16px', border: '1px solid var(--border, #ddd)', borderRadius: '8px', lineHeight: 1.7 }}>
         {renderHighlighted(text.content, wordSet)}
       </div>
       <button onClick={onDone} className="deck-btn primary" style={{ width: '100%' }}>Continue →</button>
@@ -442,12 +476,13 @@ function renderHighlighted(content: string, wordSet: Set<string>) {
   const out: React.ReactNode[] = []
   let m: RegExpExecArray | null
   let i = 0
+  let wordIdx = 0
   while ((m = regex.exec(content)) !== null) {
     if (m[1]) {
-      const isMatch = wordSet.has(normalizeWord(m[1]))
-      out.push(isMatch
-        ? <mark key={i++} style={{ background: 'var(--accent-soft, #fff3a3)', padding: '0 2px', borderRadius: '3px' }}>{m[1]}</mark>
-        : <span key={i++}>{m[1]}</span>)
+      const myIdx = wordIdx++
+      const isDayVocab = wordSet.has(normalizeWord(m[1]))
+      const cls = `reader-word${isDayVocab ? ' day-vocab' : ''}`
+      out.push(<span key={i++} className={cls} data-wi={myIdx}>{m[1]}</span>)
     } else {
       out.push(<span key={i++}>{m[2]}</span>)
     }

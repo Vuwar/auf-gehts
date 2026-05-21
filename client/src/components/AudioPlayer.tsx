@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react'
 interface Props {
   src: string
   onEnded?: () => void
+  onTimeUpdate?: (currentTime: number) => void
+  onDurationChange?: (duration: number) => void
 }
 
 const SPEEDS = [0.75, 1, 1.25, 1.5]
@@ -14,7 +16,7 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-export default function AudioPlayer({ src, onEnded }: Props) {
+export default function AudioPlayer({ src, onEnded, onTimeUpdate, onDurationChange }: Props) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const [playing, setPlaying] = useState(false)
   const [current, setCurrent] = useState(0)
@@ -81,9 +83,9 @@ export default function AudioPlayer({ src, onEnded }: Props) {
         preload="metadata"
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
-        onTimeUpdate={e => setCurrent((e.target as HTMLAudioElement).currentTime)}
-        onLoadedMetadata={e => setDuration((e.target as HTMLAudioElement).duration)}
-        onDurationChange={e => setDuration((e.target as HTMLAudioElement).duration)}
+        onTimeUpdate={e => { const t = (e.target as HTMLAudioElement).currentTime; setCurrent(t); onTimeUpdate?.(t) }}
+        onLoadedMetadata={e => { const d = (e.target as HTMLAudioElement).duration; setDuration(d); onDurationChange?.(d) }}
+        onDurationChange={e => { const d = (e.target as HTMLAudioElement).duration; setDuration(d); onDurationChange?.(d) }}
         onWaiting={() => setBuffering(true)}
         onPlaying={() => setBuffering(false)}
         onCanPlay={() => setBuffering(false)}
@@ -93,7 +95,7 @@ export default function AudioPlayer({ src, onEnded }: Props) {
       <div className="audio-player-main">
         <button
           type="button"
-          className="audio-player-play"
+          className="audio-player-play offline-allow"
           onClick={togglePlay}
           aria-label={playing ? 'Pause' : 'Play'}
         >
@@ -132,24 +134,24 @@ export default function AudioPlayer({ src, onEnded }: Props) {
       </div>
 
       <div className="audio-player-controls">
-        <button type="button" className="audio-player-control" onClick={() => skip(-10)} aria-label="Back 10 seconds">
+        <button type="button" className="audio-player-control offline-allow" onClick={() => skip(-10)} aria-label="Back 10 seconds">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M11 17l-5-5 5-5" />
             <path d="M18 17l-5-5 5-5" />
           </svg>
           <span>10s</span>
         </button>
-        <button type="button" className="audio-player-control" onClick={() => skip(10)} aria-label="Forward 10 seconds">
+        <button type="button" className="audio-player-control offline-allow" onClick={() => skip(10)} aria-label="Forward 10 seconds">
           <span>10s</span>
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M13 17l5-5-5-5" />
             <path d="M6 17l5-5-5-5" />
           </svg>
         </button>
-        <button type="button" className="audio-player-control audio-player-speed" onClick={cycleSpeed} aria-label={`Playback speed ${speed}x`}>
+        <button type="button" className="audio-player-control audio-player-speed offline-allow" onClick={cycleSpeed} aria-label={`Playback speed ${speed}x`}>
           {speed}×
         </button>
-        <button type="button" className="audio-player-control" onClick={toggleMute} aria-label={muted ? 'Unmute' : 'Mute'}>
+        <button type="button" className="audio-player-control offline-allow" onClick={toggleMute} aria-label={muted ? 'Unmute' : 'Mute'}>
           {muted ? (
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />

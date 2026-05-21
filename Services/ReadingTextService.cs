@@ -18,6 +18,9 @@ public class ReadingTextService(
 {
     public async Task<List<ReadingTextResponse>> ListAsync(Guid userId)
     {
+        var user = await currentUser.GetAsync();
+        var isAdmin = user?.Role == UserRole.Admin;
+
         var rows = await db.ReadingTexts
             .OrderByDescending(t => t.CreatedAt)
             .Select(t => new
@@ -30,26 +33,60 @@ public class ReadingTextService(
             })
             .ToListAsync();
 
-        return rows.Select(r => new ReadingTextResponse(
-            r.Id, r.Title, r.Content, r.Level, r.WeekId, r.WeekNumber,
-            r.CreatedByUserId, r.CreatorName,
-            r.CreatedByUserId == userId,
-            r.CreatedAt,
-            r.AudioUrl, r.AudioDurationSec, r.AudioVoice,
-            r.Questions.Select(MapQuestion).ToList()
-        )).ToList();
+        var officialIds = rows.Where(r => r.WeekId.HasValue).Select(r => r.Id).ToList();
+        var textToTag = officialIds.Count > 0
+            ? (await db.Tags
+                .Where(t => t.ReadingTextId.HasValue && officialIds.Contains(t.ReadingTextId!.Value))
+                .Select(t => new { ReadingTextId = t.ReadingTextId!.Value, t.Id })
+                .ToListAsync()).ToDictionary(x => x.ReadingTextId, x => x.Id)
+            : new Dictionary<Guid, Guid>();
+
+        HashSet<Guid> completedTagIds = [];
+        if (!isAdmin && textToTag.Count > 0)
+        {
+            var tagIds = textToTag.Values.ToList();
+            completedTagIds = (await db.UserTagProgress
+                .Where(p => p.UserId == userId && tagIds.Contains(p.TagId) && p.CompletedStepsMask == TagService.AllStepsMask)
+                .Select(p => p.TagId)
+                .ToListAsync()).ToHashSet();
+        }
+
+        return rows.Select(r =>
+        {
+            var tagId = textToTag.TryGetValue(r.Id, out var tid) ? (Guid?)tid : null;
+            var isUnlocked = isAdmin || !r.WeekId.HasValue || tagId == null || completedTagIds.Contains(tagId.Value);
+            return new ReadingTextResponse(
+                r.Id, r.Title, r.Content, r.Level, r.WeekId, r.WeekNumber,
+                tagId, isUnlocked,
+                r.CreatedByUserId, r.CreatorName,
+                r.CreatedByUserId == userId,
+                r.CreatedAt,
+                r.AudioUrl, r.AudioDurationSec, r.AudioVoice,
+                r.Questions.Select(MapQuestion).ToList()
+            );
+        }).ToList();
     }
 
     public async Task<ReadingTextResponse?> GetAsync(Guid id, Guid userId)
     {
-        var t = await db.ReadingTexts
-            .Include(x => x.Questions)
-            .Include(x => x.Week)
-            .FirstOrDefaultAsync(x => x.Id == id);
+        var user = await currentUser.GetAsync();
+        var isAdmin = user?.Role == UserRole.Admin;
+
+        var t = await db.ReadingTexts.Include(x => x.Questions).Include(x => x.Week).FirstOrDefaultAsync(x => x.Id == id);
         if (t is null) return null;
+
         var creatorName = await db.Users.Where(u => u.Id == t.CreatedByUserId).Select(u => u.DisplayName ?? u.Email).FirstOrDefaultAsync();
+
+        var tagId = t.WeekId.HasValue
+            ? await db.Tags.Where(tag => tag.ReadingTextId == t.Id).Select(tag => (Guid?)tag.Id).FirstOrDefaultAsync()
+            : null;
+
+        var isUnlocked = isAdmin || !t.WeekId.HasValue || tagId == null
+            || await db.UserTagProgress.AnyAsync(p => p.UserId == userId && p.TagId == tagId.Value && p.CompletedStepsMask == TagService.AllStepsMask);
+
         return new ReadingTextResponse(
             t.Id, t.Title, t.Content, t.Level, t.WeekId, t.Week?.Number,
+            tagId, isUnlocked,
             t.CreatedByUserId, creatorName, t.CreatedByUserId == userId, t.CreatedAt,
             t.AudioUrl, t.AudioDurationSec, t.AudioVoice,
             t.Questions.OrderBy(q => q.DisplayOrder).Select(MapQuestion).ToList()

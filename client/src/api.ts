@@ -155,6 +155,8 @@ export interface ReadingText {
   level: string | null
   weekId: string | null
   weekNumber: number | null
+  tagId: string | null
+  isUnlocked: boolean
   createdByUserId: string | null
   createdByName: string | null
   isOwner: boolean

@@ -7,6 +7,8 @@ public record ReadingTextResponse(
     string? Level,
     Guid? WeekId,
     int? WeekNumber,
+    Guid? TagId,
+    bool IsUnlocked,
     Guid? CreatedByUserId,
     string? CreatedByName,
     bool IsOwner,

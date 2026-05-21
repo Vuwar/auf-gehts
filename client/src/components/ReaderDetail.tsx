@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api, type ReadingText, type ReadingTextQuestion } from '../api'
 import { useAuth } from '../auth'
@@ -7,6 +7,7 @@ import AudioPlayer from './AudioPlayer'
 import FilePicker from './FilePicker'
 import ConfirmationDialog from './ConfirmationDialog'
 import { PageSkeleton } from './Skeletons'
+import { buildWordTimings, wordAtTime } from '../wordSync'
 
 type PassageMode = 'listen' | 'both' | 'read'
 const PASSAGE_MODE_KEY = 'passageMode'
@@ -42,6 +43,10 @@ export default function ReaderDetail() {
   const [revealText, setRevealText] = useState(false)
   const [audioBusy, setAudioBusy] = useState(false)
   const [confirmAction, setConfirmAction] = useState<'deleteText' | 'removeAudio' | null>(null)
+  const [audioDuration, setAudioDuration] = useState(0)
+  const wordTimingsRef = useRef<number[]>([])
+  const textRef = useRef<HTMLDivElement>(null)
+  const lastSyncIdxRef = useRef(-1)
 
   useEffect(() => {
     if (!id) return
@@ -55,6 +60,28 @@ export default function ReaderDetail() {
   useEffect(() => {
     try { localStorage.setItem(PASSAGE_MODE_KEY, mode) } catch {}
   }, [mode])
+
+  useEffect(() => {
+    wordTimingsRef.current = text?.content && audioDuration > 0
+      ? buildWordTimings(text.content, audioDuration) : []
+    if (lastSyncIdxRef.current >= 0) {
+      textRef.current?.querySelector<HTMLElement>(`[data-wi="${lastSyncIdxRef.current}"]`)?.removeAttribute('data-synced')
+    }
+    lastSyncIdxRef.current = -1
+  }, [text?.content, audioDuration])
+
+  const handleTimeUpdate = useCallback((t: number) => {
+    const newIdx = wordAtTime(wordTimingsRef.current, t)
+    if (newIdx === lastSyncIdxRef.current) return
+    const container = textRef.current
+    if (container) {
+      if (lastSyncIdxRef.current >= 0)
+        container.querySelector<HTMLElement>(`[data-wi="${lastSyncIdxRef.current}"]`)?.removeAttribute('data-synced')
+      if (newIdx >= 0)
+        container.querySelector<HTMLElement>(`[data-wi="${newIdx}"]`)?.setAttribute('data-synced', '')
+    }
+    lastSyncIdxRef.current = newIdx
+  }, [])
 
   // Fall back to "both" mode when the passage has no audio but mode is listen-only.
   const effectiveMode: PassageMode = (mode === 'listen' && !text?.audioUrl) ? 'both' : mode
@@ -134,6 +161,17 @@ export default function ReaderDetail() {
 
   if (loading) return <PageSkeleton page="detail" />
   if (!text) return <div className="deck"><p className="empty-state">Text not found.</p></div>
+  if (!text.isUnlocked) return (
+    <div className="deck">
+      <div><button onClick={() => nav('/reader')} className="deck-btn offline-allow">← All texts</button></div>
+      <div className="reader-locked">
+        <span className="reader-locked-icon" aria-hidden>🔒</span>
+        <h2>{text.title}</h2>
+        <p>Complete the day this text belongs to in order to unlock it.</p>
+        {text.weekNumber && <p className="hint">Woche {text.weekNumber}</p>}
+      </div>
+    </div>
+  )
 
   const showAudio = (effectiveMode === 'listen' || effectiveMode === 'both') && text.audioUrl
   const showText = effectiveMode === 'read' || effectiveMode === 'both' || (effectiveMode === 'listen' && revealText)
@@ -191,12 +229,14 @@ export default function ReaderDetail() {
           <AudioPlayer
             src={text.audioUrl!}
             onEnded={() => setAudioCompleted(true)}
+            onTimeUpdate={handleTimeUpdate}
+            onDurationChange={setAudioDuration}
           />
         </div>
       )}
 
       {showText && (
-        <div className="reader-text">
+        <div className="reader-text" ref={textRef}>
           {renderText(text.content, vocabFronts, onWordClick)}
         </div>
       )}
@@ -382,17 +422,24 @@ function QuestionView({ index, question, answer, onAnswer, checked }: QVProps) {
   )
 }
 
-function renderText(content: string, vocab: Set<string>, onClick: (e: React.MouseEvent<HTMLSpanElement>, word: string, sentence: string) => void) {
+function renderText(
+  content: string,
+  vocab: Set<string>,
+  onClick: (e: React.MouseEvent<HTMLSpanElement>, word: string, sentence: string) => void,
+) {
   const sentences = content.split(/(?<=[.!?])\s+/)
+  let wordIdx = 0
   return sentences.map((sentence, sIdx) => (
     <span key={sIdx}>
       {tokenize(sentence).map((tok, i) => {
         if (tok.isWord) {
+          const myIdx = wordIdx++
           const isSaved = vocab.has(normalize(tok.text))
           return (
             <span
               key={i}
-              className={`reader-word ${isSaved ? 'saved' : ''}`}
+              className={`reader-word${isSaved ? ' saved' : ''}`}
+              data-wi={myIdx}
               onClick={(e) => onClick(e, tok.text, sentence.trim())}
             >
               {tok.text}
