@@ -29,12 +29,37 @@ export default function AudioPlayer({ src, onEnded, onTimeUpdate, onDurationChan
   const [error, setError] = useState<string | null>(null)
   const retryCountRef = useRef(0)
   const lastTimeRef = useRef(0)
+  const rafIdRef = useRef(0)
+  const onTimeUpdateRef = useRef(onTimeUpdate)
+
+  useEffect(() => { onTimeUpdateRef.current = onTimeUpdate }, [onTimeUpdate])
 
   useEffect(() => {
     const a = audioRef.current
     if (!a) return
     a.playbackRate = speed
   }, [speed])
+
+  useEffect(() => {
+    if (!playing) {
+      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current)
+      rafIdRef.current = 0
+      return
+    }
+    const tick = () => {
+      const a = audioRef.current
+      if (!a) { rafIdRef.current = 0; return }
+      const t = a.currentTime
+      lastTimeRef.current = t
+      onTimeUpdateRef.current?.(t)
+      rafIdRef.current = requestAnimationFrame(tick)
+    }
+    rafIdRef.current = requestAnimationFrame(tick)
+    return () => {
+      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current)
+      rafIdRef.current = 0
+    }
+  }, [playing])
 
   useEffect(() => {
     setCurrent(0)
@@ -148,7 +173,6 @@ export default function AudioPlayer({ src, onEnded, onTimeUpdate, onDurationChan
           const t = (e.target as HTMLAudioElement).currentTime
           lastTimeRef.current = t
           setCurrent(t)
-          onTimeUpdate?.(t)
         }}
         onLoadedMetadata={e => {
           const d = (e.target as HTMLAudioElement).duration

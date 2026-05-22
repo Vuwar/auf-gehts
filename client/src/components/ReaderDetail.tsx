@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, type ReadingText, type ReadingTextQuestion } from '../api'
 import { useAuth } from '../auth'
@@ -50,7 +50,10 @@ export default function ReaderDetail() {
   const [audioDuration, setAudioDuration] = useState(0)
   const wordTimingsRef = useRef<number[]>([])
   const textRef = useRef<HTMLDivElement>(null)
+  const wordElsRef = useRef<HTMLElement[]>([])
   const lastSyncIdxRef = useRef(-1)
+  const rafIdRef = useRef(0)
+  const pendingIdxRef = useRef(-1)
 
   useEffect(() => {
     if (!id) return
@@ -68,23 +71,46 @@ export default function ReaderDetail() {
   useEffect(() => {
     wordTimingsRef.current = text?.content && audioDuration > 0
       ? buildWordTimings(text.content, audioDuration) : []
-    if (lastSyncIdxRef.current >= 0) {
-      textRef.current?.querySelector<HTMLElement>(`[data-wi="${lastSyncIdxRef.current}"]`)?.removeAttribute('data-synced')
+    const els = wordElsRef.current
+    if (lastSyncIdxRef.current >= 0 && els[lastSyncIdxRef.current]) {
+      els[lastSyncIdxRef.current].removeAttribute('data-synced')
     }
     lastSyncIdxRef.current = -1
   }, [text?.content, audioDuration])
 
+  useLayoutEffect(() => {
+    const c = textRef.current
+    if (!c) { wordElsRef.current = []; return }
+    const nodes = c.querySelectorAll<HTMLElement>('[data-wi]')
+    const arr: HTMLElement[] = new Array(nodes.length)
+    nodes.forEach(n => {
+      const i = Number(n.getAttribute('data-wi'))
+      if (!Number.isNaN(i)) arr[i] = n
+    })
+    wordElsRef.current = arr
+  }, [text?.content, vocabFronts])
+
+  useEffect(() => () => {
+    if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current)
+  }, [])
+
   const handleTimeUpdate = useCallback((t: number) => {
-    const newIdx = wordAtTime(wordTimingsRef.current, t)
-    if (newIdx === lastSyncIdxRef.current) return
-    const container = textRef.current
-    if (container) {
-      if (lastSyncIdxRef.current >= 0)
-        container.querySelector<HTMLElement>(`[data-wi="${lastSyncIdxRef.current}"]`)?.removeAttribute('data-synced')
-      if (newIdx >= 0)
-        container.querySelector<HTMLElement>(`[data-wi="${newIdx}"]`)?.setAttribute('data-synced', '')
-    }
-    lastSyncIdxRef.current = newIdx
+    const times = wordTimingsRef.current
+    if (times.length === 0) return
+    const newIdx = wordAtTime(times, t)
+    if (newIdx === pendingIdxRef.current) return
+    pendingIdxRef.current = newIdx
+    if (rafIdRef.current) return
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = 0
+      const target = pendingIdxRef.current
+      const last = lastSyncIdxRef.current
+      if (target === last) return
+      const els = wordElsRef.current
+      if (last >= 0 && els[last]) els[last].removeAttribute('data-synced')
+      if (target >= 0 && els[target]) els[target].setAttribute('data-synced', '')
+      lastSyncIdxRef.current = target
+    })
   }, [])
 
   // Fall back to "both" mode when the passage has no audio but mode is listen-only.
