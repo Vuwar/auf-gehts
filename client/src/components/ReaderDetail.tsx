@@ -37,6 +37,7 @@ export default function ReaderDetail() {
 
   const [translation, setTranslation] = useState<string | null>(null)
   const [translating, setTranslating] = useState(false)
+  const [translationOpen, setTranslationOpen] = useState(false)
 
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [checked, setChecked] = useState(false)
@@ -115,12 +116,16 @@ export default function ReaderDetail() {
     if (dx > 8 || dy > 8) touchScrolledRef.current = true
   }
 
-  const translateAll = async () => {
+  const toggleTranslation = async () => {
     if (!text) return
+    if (translationOpen) { setTranslationOpen(false); return }
+    if (translation) { setTranslationOpen(true); return }
+    if (translating) return
     setTranslating(true)
     try {
       const r = await api.translate(text.content)
       setTranslation(r.translation)
+      setTranslationOpen(true)
     } catch (e: any) {
       alert(e.message)
     } finally { setTranslating(false) }
@@ -271,18 +276,58 @@ export default function ReaderDetail() {
       )}
 
       {showText && (
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button onClick={translateAll} disabled={translating} className="deck-btn">
-            {translating ? 'Translating...' : '🌐 Show translation'}
-          </button>
-        </div>
-      )}
-
-      {translation && showText && (
-        <div className="reader-translation">
-          <span className="card-label">English translation</span>
-          <p>{translation}</p>
-          <button onClick={() => setTranslation(null)} className="deck-btn" style={{ alignSelf: 'flex-start', marginTop: '6px' }}>Hide</button>
+        <div className="translate-block">
+          <div className="translate-footer">
+            <div className="translate-legend" aria-label="Highlight legend">
+              <span className="translate-legend-item">
+                <span className="translate-legend-dot is-saved" aria-hidden />
+                <span className="translate-legend-text-full">Saved vocab</span>
+                <span className="translate-legend-text-short">Saved</span>
+              </span>
+              <span className="translate-legend-item">
+                <span className="translate-legend-dot is-audio" aria-hidden />
+                <span className="translate-legend-text-full">Now playing</span>
+                <span className="translate-legend-text-short">Playing</span>
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={toggleTranslation}
+              disabled={translating}
+              aria-expanded={translationOpen}
+              className={`translate-toggle${translationOpen ? ' is-active' : ''}`}
+            >
+              {translationOpen ? (
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="2" y1="12" x2="22" y2="12" />
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                </svg>
+              )}
+              {translating ? (
+                <span className="translate-toggle-text-full">Translating…</span>
+              ) : (
+                <>
+                  <span className="translate-toggle-text-full">{translationOpen ? 'Hide translation' : 'Show translation'}</span>
+                  <span className="translate-toggle-text-short">{translationOpen ? 'Hide' : 'Translate'}</span>
+                </>
+              )}
+            </button>
+          </div>
+          <div className={`translate-panel${translationOpen && translation ? ' is-open' : ''}`} aria-hidden={!translationOpen}>
+            <div className="translate-panel-inner">
+              <span className="translate-panel-label">
+                <span aria-hidden>🇬🇧</span>
+                English translation
+              </span>
+              <p className="translate-panel-body">{translation}</p>
+            </div>
+          </div>
         </div>
       )}
 
