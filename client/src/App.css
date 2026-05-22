@@ -4325,6 +4325,15 @@ input[type="checkbox"] {
 
 /* ── TagFlow refinements ─────────────────────────────────── */
 
+/* Paired Back/Next nav row */
+.nav-pair {
+  display: flex;
+  gap: 8px;
+}
+.nav-pair .deck-btn {
+  flex: 1;
+}
+
 /* Segmented progress (Step 1, Step 2) */
 .step-progress {
   display: flex;
@@ -4409,6 +4418,52 @@ input[type="checkbox"] {
   text-align: center;
   font-style: italic;
   opacity: 0.85;
+}
+
+/* Clickable step rows (Tag overview) */
+.tag-step {
+  padding: 0 !important;
+  overflow: hidden;
+}
+.tag-step-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  color: var(--text-h);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.tag-step-row:hover:not(:disabled) {
+  background: var(--accent-bg);
+}
+.tag-step-row:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.tag-step-row:disabled {
+  cursor: not-allowed;
+}
+.tag-step-chevron {
+  margin-left: auto;
+  color: var(--text);
+  opacity: 0.5;
+  display: inline-flex;
+}
+.tag-step--locked {
+  opacity: 0.55;
+  background: repeating-linear-gradient(
+    45deg,
+    transparent 0 6px,
+    color-mix(in srgb, var(--text) 5%, transparent) 6px 7px
+  );
+}
+.tag-step--locked .tag-step-label {
+  color: var(--text);
 }
 
 /* Skipped step indicator (Overview) */

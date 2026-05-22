@@ -123,6 +123,12 @@ export default function TagFlow() {
     setView('step')
   }
 
+  const jumpToStep = (idx: number) => {
+    if (!tag) return
+    setStepIndex(idx)
+    setView('step')
+  }
+
   if (loading) return <PageSkeleton page="detail" />
   if (!tag) return <div className="deck"><p className="empty-state">Tag not found.</p></div>
 
@@ -146,6 +152,7 @@ export default function TagFlow() {
           isAdmin={isAdmin}
           onBack={() => nav(`/abenteuer/woche-${tag.weekNumber}`)}
           onStart={startOrResume}
+          onStepClick={jumpToStep}
           onEdit={() => setEditingTag(true)}
           onCreateSet={() => setCreatingSet(true)}
           onAssignExisting={() => setAssigningExisting(true)}
@@ -221,12 +228,13 @@ interface OverviewProps {
   isAdmin: boolean
   onBack: () => void
   onStart: () => void
+  onStepClick: (idx: number) => void
   onEdit: () => void
   onCreateSet: () => void
   onAssignExisting: () => void
 }
 
-function Overview({ tag, completedMask, skippedMask, isAdmin, onBack, onStart, onEdit, onCreateSet, onAssignExisting }: OverviewProps) {
+function Overview({ tag, completedMask, skippedMask, isAdmin, onBack, onStart, onStepClick, onEdit, onCreateSet, onAssignExisting }: OverviewProps) {
   const isStarted = completedMask !== 0
   const isComplete = completedMask === ALL_MASK
   const btnLabel = isComplete ? 'Wiederholen' : isStarted ? 'Weiter' : 'Los gehts'
@@ -251,12 +259,35 @@ function Overview({ tag, completedMask, skippedMask, isAdmin, onBack, onStart, o
         {STEP_LABELS.map((lbl, i) => {
           const done = (completedMask & (1 << i)) !== 0
           const skipped = !done && (skippedMask & (1 << i)) !== 0
-          const cls = `tag-step${done ? ' tag-step--done' : ''}${skipped ? ' tag-step--skipped' : ''}`
+          const prevDone = i === 0 || (completedMask & (1 << (i - 1))) !== 0
+          const locked = !done && !prevDone
+          const status = locked ? 'locked' : done ? 'completed' : skipped ? 'idle' : 'idle'
+          const cls = [
+            'tag-step',
+            done ? 'tag-step--done' : '',
+            skipped ? 'tag-step--skipped' : '',
+            locked ? 'tag-step--locked' : '',
+          ].filter(Boolean).join(' ')
           return (
             <li key={i} className={cls}>
-              <StatusIcon status={done ? 'completed' : 'idle'} />
-              <span className="tag-step-label">{lbl}</span>
-              {skipped && <span className="tag-step-skip-tag">Übersprungen</span>}
+              <button
+                type="button"
+                className="tag-step-row"
+                onClick={() => onStepClick(i)}
+                disabled={locked}
+                aria-label={locked ? `${lbl} (locked)` : lbl}
+              >
+                <StatusIcon status={status} />
+                <span className="tag-step-label">{lbl}</span>
+                {skipped && <span className="tag-step-skip-tag">Skipped</span>}
+                {!locked && !skipped && (
+                  <span className="tag-step-chevron" aria-hidden>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </span>
+                )}
+              </button>
             </li>
           )
         })}
@@ -303,12 +334,24 @@ function StepView({ tag, stepIndex, onAdvance, onSkip, onBack }: StepProps) {
   )
 }
 
+function shuffle<T>(arr: T[]): T[] {
+  const out = [...arr]
+  for (let k = out.length - 1; k > 0; k--) {
+    const j = Math.floor(Math.random() * (k + 1))
+    ;[out[k], out[j]] = [out[j], out[k]]
+  }
+  return out
+}
+
 function NeueWoerter({ words, onDone }: { words: Word[]; onDone: () => void }) {
+  const [order, setOrder] = useState<Word[]>(() => shuffle(words))
   const [i, setI] = useState(0)
   const canSpeak = ttsAvailable()
+
+  useEffect(() => { setOrder(shuffle(words)); setI(0) }, [words])
   useEffect(() => () => { stopSpeaking() }, [])
 
-  if (words.length === 0) {
+  if (order.length === 0) {
     return (
       <div>
         <p className="empty-state">No words for this Tag.</p>
@@ -317,17 +360,20 @@ function NeueWoerter({ words, onDone }: { words: Word[]; onDone: () => void }) {
     )
   }
 
-  const w = words[i]
-  const isLast = i === words.length - 1
+  const w = order[i]
+  const isLast = i === order.length - 1
+  const isFirst = i === 0
 
   const speak = (e: React.MouseEvent) => { e.stopPropagation(); speakGerman(w.front) }
+  const goBack = () => { stopSpeaking(); if (!isFirst) setI(i - 1) }
+  const goNext = () => { stopSpeaking(); if (isLast) onDone(); else setI(i + 1) }
 
   return (
     <div className="form-row">
-      <StepProgress current={i + 1} total={words.length} label="Wort" />
+      <StepProgress current={i + 1} total={order.length} label="Word" />
       <div className="neue-woerter-card">
         <div className="neue-woerter-card-head">
-          <span className="card-label">Deutsch</span>
+          <span className="card-label">German</span>
           {canSpeak && (
             <button onClick={speak} className="word-speaker" aria-label="Hear pronunciation" type="button">
               <SpeakerIcon />
@@ -338,13 +384,24 @@ function NeueWoerter({ words, onDone }: { words: Word[]; onDone: () => void }) {
         <p className="neue-woerter-back">{w.back}</p>
         {w.context && <p className="neue-woerter-context">{w.context}</p>}
       </div>
-      <button
-        onClick={() => { stopSpeaking(); if (isLast) onDone(); else setI(i + 1) }}
-        className="deck-btn primary"
-        style={{ width: '100%' }}
-      >
-        {isLast ? 'Done →' : 'Next →'}
-      </button>
+      <div className="nav-pair">
+        <button
+          onClick={goBack}
+          disabled={isFirst}
+          className="deck-btn"
+          type="button"
+          aria-label="Previous word"
+        >
+          ← Back
+        </button>
+        <button
+          onClick={goNext}
+          className="deck-btn primary"
+          type="button"
+        >
+          {isLast ? 'Done ✓' : 'Next →'}
+        </button>
+      </div>
     </div>
   )
 }
@@ -406,11 +463,11 @@ function Flashcards({ words, onDone }: { words: Word[]; onDone: () => void }) {
         <p className="empty-state">✓ {correctSet.size} / {total} recalled</p>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button onClick={restart} className="deck-btn" style={{ flex: 1 }} type="button">
-            <RepeatIcon /> <span style={{ marginLeft: 6 }}>Wiederholen</span>
+            <RepeatIcon /> <span style={{ marginLeft: 6 }}>Repeat</span>
           </button>
           <button onClick={onDone} className="deck-btn primary" style={{ flex: 1 }}>Continue →</button>
         </div>
-        <p className="hint" style={{ textAlign: 'center' }}>Fortschritt wird beibehalten.</p>
+        <p className="hint" style={{ textAlign: 'center' }}>Your progress is saved.</p>
       </div>
     )
   }
@@ -434,8 +491,8 @@ function Flashcards({ words, onDone }: { words: Word[]; onDone: () => void }) {
 
   return (
     <div className="form-row">
-      <StepProgress current={total - remaining + 1} total={total} label="Karte" />
-      <div className="hint" style={{ textAlign: 'center' }}>✓ {correctSet.size} · Verbleibend {remaining}</div>
+      <StepProgress current={total - remaining + 1} total={total} label="Card" />
+      <div className="hint" style={{ textAlign: 'center' }}>✓ {correctSet.size} · Remaining {remaining}</div>
       <div className="card-section">
         <FlashCard key={current.id} front={current.front} back={current.back} />
         <div className="grade-buttons">
@@ -449,9 +506,9 @@ function Flashcards({ words, onDone }: { words: Word[]; onDone: () => void }) {
       </div>
       <div style={{ display: 'flex', gap: '8px' }}>
         <button onClick={restart} className="deck-btn" style={{ flex: 1 }} type="button" aria-label="Restart deck">
-          <RepeatIcon /> <span style={{ marginLeft: 6 }}>Wiederholen</span>
+          <RepeatIcon /> <span style={{ marginLeft: 6 }}>Repeat</span>
         </button>
-        <button onClick={() => setFinished(true)} className="deck-btn" style={{ flex: 1 }} type="button">Beenden</button>
+        <button onClick={() => setFinished(true)} className="deck-btn" style={{ flex: 1 }} type="button">Finish</button>
       </div>
     </div>
   )
@@ -695,7 +752,7 @@ function Fragen({ questions, onDone }: { questions: ReadingTextQuestion[]; onDon
         const isMissing = !checked && attemptedCheck && !isAnswered(q)
         return (
           <div key={q.id} className={`question-view ${isCorrect ? 'correct' : ''} ${isWrong ? 'wrong' : ''} ${isMissing ? 'unanswered' : ''}`} style={{ padding: '12px', border: '1px solid var(--border, #ddd)', borderRadius: '8px' }}>
-            {isMissing && <span className="question-missing-tag">Bitte beantworten</span>}
+            {isMissing && <span className="question-missing-tag">Please answer</span>}
             <div><strong>Q{idx + 1}.</strong> {q.prompt}</div>
             {q.type === 'MultipleChoice' && q.options && q.options.map((opt, i) => (
               <label key={i} className="answer-option" style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
@@ -727,7 +784,7 @@ function Fragen({ questions, onDone }: { questions: ReadingTextQuestion[]; onDon
       {!checked ? (
         <>
           {attemptedCheck && !allAnswered && (
-            <p className="hint hint-warn">Bitte alle {unansweredCount} offenen Fragen beantworten.</p>
+            <p className="hint hint-warn">Please answer all {unansweredCount} remaining {unansweredCount === 1 ? 'question' : 'questions'}.</p>
           )}
           <button
             onClick={() => { setAttemptedCheck(true); if (allAnswered) setChecked(true) }}
@@ -844,10 +901,10 @@ function Nachsprechen({ text, onDone, onSkip }: { text: string; onDone: () => vo
         style={{ width: '100%' }}
         type="button"
       >
-        Ich kann gerade nicht sprechen
+        I can't speak right now
       </button>
       <p className="hint" style={{ textAlign: 'center', fontSize: '11px' }}>
-        Übersprungen — nicht als abgeschlossen markiert.
+        Skipped — not marked as completed.
       </p>
     </div>
   )
