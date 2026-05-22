@@ -4,6 +4,7 @@ import { api, type Tag, type TagDetail, type Word, type ReadingTextQuestion } fr
 import { useAuth } from '../auth'
 import { speakGerman, stopSpeaking, ttsAvailable } from '../tts'
 import AudioPlayer from './AudioPlayer'
+import WordLookupPopup from './WordLookupPopup'
 import { buildWordTimings, wordAtTime } from '../wordSync'
 import { PageSkeleton } from './Skeletons'
 import EditTagSheet from './EditTagSheet'
@@ -418,6 +419,16 @@ function Lesen({ text, words, onDone }: { text: TagDetail['readingText']; words:
   const textRef = useRef<HTMLDivElement>(null)
   const lastSyncIdxRef = useRef(-1)
   const wordSet = useMemo(() => new Set(words.map(w => normalizeWord(w.front))), [words])
+  const [vocabFronts, setVocabFronts] = useState<Set<string>>(new Set())
+  const [popup, setPopup] = useState<{ word: string; sentence: string | null; rect: DOMRect } | null>(null)
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null)
+  const touchScrolledRef = useRef(false)
+
+  useEffect(() => {
+    api.vocabFronts()
+      .then(list => setVocabFronts(new Set(list.map(f => normalizeWord(f)))))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     wordTimingsRef.current = text?.content && audioDuration > 0
@@ -441,6 +452,32 @@ function Lesen({ text, words, onDone }: { text: TagDetail['readingText']; words:
     lastSyncIdxRef.current = newIdx
   }, [])
 
+  const onWordClick = (e: React.MouseEvent<HTMLSpanElement>, word: string, sentence: string) => {
+    if (touchScrolledRef.current) {
+      touchScrolledRef.current = false
+      return
+    }
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    setPopup({ word, sentence, rect })
+  }
+
+  const onWordTouchStart = (e: React.TouchEvent<HTMLSpanElement>) => {
+    const t = e.touches[0]
+    if (!t) return
+    touchStartRef.current = { x: t.clientX, y: t.clientY }
+    touchScrolledRef.current = false
+  }
+
+  const onWordTouchMove = (e: React.TouchEvent<HTMLSpanElement>) => {
+    const start = touchStartRef.current
+    if (!start) return
+    const t = e.touches[0]
+    if (!t) return
+    const dx = Math.abs(t.clientX - start.x)
+    const dy = Math.abs(t.clientY - start.y)
+    if (dx > 8 || dy > 8) touchScrolledRef.current = true
+  }
+
   if (!text) {
     return (
       <div>
@@ -451,7 +488,7 @@ function Lesen({ text, words, onDone }: { text: TagDetail['readingText']; words:
   }
   return (
     <div className="form-row">
-      <p className="hint">Read along while audio plays. Today's words are highlighted.</p>
+      <p className="hint">Read along while audio plays. Today's words are highlighted. Tap any word for a lookup.</p>
       {text.audioUrl && (
         <AudioPlayer
           src={text.audioUrl}
@@ -460,9 +497,18 @@ function Lesen({ text, words, onDone }: { text: TagDetail['readingText']; words:
         />
       )}
       <div ref={textRef} className="reader-text" style={{ padding: '16px', border: '1px solid var(--border, #ddd)', borderRadius: '8px', lineHeight: 1.7 }}>
-        {renderHighlighted(text.content, wordSet)}
+        {renderHighlighted(text.content, wordSet, vocabFronts, onWordClick, onWordTouchStart, onWordTouchMove)}
       </div>
       <button onClick={onDone} className="deck-btn primary" style={{ width: '100%' }}>Continue →</button>
+      {popup && (
+        <WordLookupPopup
+          word={popup.word}
+          sentence={popup.sentence}
+          anchorRect={popup.rect}
+          onClose={() => setPopup(null)}
+          onSaved={(front) => setVocabFronts(new Set([...vocabFronts, normalizeWord(front)]))}
+        />
+      )}
     </div>
   )
 }
@@ -471,21 +517,47 @@ function normalizeWord(s: string): string {
   return s.toLowerCase().replace(/^(der|die|das)\s+/, '').trim()
 }
 
-function renderHighlighted(content: string, wordSet: Set<string>) {
-  const regex = /([A-Za-zäöüÄÖÜß]+)|([^A-Za-zäöüÄÖÜß]+)/g
+function renderHighlighted(
+  content: string,
+  wordSet: Set<string>,
+  vocab: Set<string>,
+  onClick: (e: React.MouseEvent<HTMLSpanElement>, word: string, sentence: string) => void,
+  onTouchStart: (e: React.TouchEvent<HTMLSpanElement>) => void,
+  onTouchMove: (e: React.TouchEvent<HTMLSpanElement>) => void,
+) {
+  const sentences = content.split(/(?<=[.!?])\s+/)
   const out: React.ReactNode[] = []
-  let m: RegExpExecArray | null
-  let i = 0
+  let key = 0
   let wordIdx = 0
-  while ((m = regex.exec(content)) !== null) {
-    if (m[1]) {
-      const myIdx = wordIdx++
-      const isDayVocab = wordSet.has(normalizeWord(m[1]))
-      const cls = `reader-word${isDayVocab ? ' day-vocab' : ''}`
-      out.push(<span key={i++} className={cls} data-wi={myIdx}>{m[1]}</span>)
-    } else {
-      out.push(<span key={i++}>{m[2]}</span>)
+  for (let s = 0; s < sentences.length; s++) {
+    const sentence = sentences[s]
+    const regex = /([A-Za-zäöüÄÖÜß]+)|([^A-Za-zäöüÄÖÜß]+)/g
+    let m: RegExpExecArray | null
+    while ((m = regex.exec(sentence)) !== null) {
+      if (m[1]) {
+        const myIdx = wordIdx++
+        const token = m[1]
+        const norm = normalizeWord(token)
+        const isDayVocab = wordSet.has(norm)
+        const isSaved = vocab.has(norm)
+        const cls = `reader-word${isDayVocab ? ' day-vocab' : ''}${isSaved ? ' saved' : ''}`
+        out.push(
+          <span
+            key={key++}
+            className={cls}
+            data-wi={myIdx}
+            onClick={(e) => onClick(e, token, sentence.trim())}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+          >
+            {token}
+          </span>
+        )
+      } else {
+        out.push(<span key={key++}>{m[2]}</span>)
+      }
     }
+    if (s < sentences.length - 1) out.push(<span key={key++}> </span>)
   }
   return out
 }
