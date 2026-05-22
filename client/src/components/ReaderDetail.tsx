@@ -260,12 +260,10 @@ export default function ReaderDetail() {
       )}
 
       {showText && (
-        <>
+        <div className="reader-text" ref={textRef}>
+          {renderText(text.content, vocabFronts, onWordClick, onWordTouchStart, onWordTouchMove)}
           <WordHighlightLegend showDay={false} />
-          <div className="reader-text" ref={textRef}>
-            {renderText(text.content, vocabFronts, onWordClick, onWordTouchStart, onWordTouchMove)}
-          </div>
-        </>
+        </div>
       )}
 
       {effectiveMode === 'listen' && !revealText && audioCompleted && (

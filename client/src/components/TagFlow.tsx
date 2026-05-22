@@ -490,7 +490,6 @@ function Lesen({ text, words, onDone }: { text: TagDetail['readingText']; words:
   return (
     <div className="form-row">
       <p className="hint">Read along while audio plays. Tap any word for a lookup.</p>
-      <WordHighlightLegend showDay />
       {text.audioUrl && (
         <AudioPlayer
           src={text.audioUrl}
@@ -500,6 +499,7 @@ function Lesen({ text, words, onDone }: { text: TagDetail['readingText']; words:
       )}
       <div ref={textRef} className="reader-text" style={{ padding: '16px', border: '1px solid var(--border, #ddd)', borderRadius: '8px', lineHeight: 1.7 }}>
         {renderHighlighted(text.content, wordSet, vocabFronts, onWordClick, onWordTouchStart, onWordTouchMove)}
+        <WordHighlightLegend showDay />
       </div>
       <button onClick={onDone} className="deck-btn primary" style={{ width: '100%' }}>Continue →</button>
       {popup && (
