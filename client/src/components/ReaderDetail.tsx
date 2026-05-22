@@ -3,7 +3,6 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, type ReadingText, type ReadingTextQuestion } from '../api'
 import { useAuth } from '../auth'
 import WordLookupPopup from './WordLookupPopup'
-import WordHighlightLegend from './WordHighlightLegend'
 import AudioPlayer from './AudioPlayer'
 import EditTextSheet from './EditTextSheet'
 import { PenIcon } from './EditSetSheet'
@@ -239,91 +238,95 @@ export default function ReaderDetail() {
         <p className="hint">No audio for this passage yet. Showing text instead.</p>
       )}
 
-      {showAudio && (
-        <div className="passage-audio">
-          <AudioPlayer
-            src={text.audioUrl!}
-            onEnded={() => setAudioCompleted(true)}
-            onTimeUpdate={handleTimeUpdate}
-            onDurationChange={setAudioDuration}
-          />
-        </div>
-      )}
+      {(showAudio || showText) && (
+        <section className="reader-panel" aria-label="Reading passage">
+          {showAudio && (
+            <div className="reader-panel-audio">
+              <AudioPlayer
+                src={text.audioUrl!}
+                onEnded={() => setAudioCompleted(true)}
+                onTimeUpdate={handleTimeUpdate}
+                onDurationChange={setAudioDuration}
+              />
+            </div>
+          )}
 
-      {showText && (
-        <div className="reader-text" ref={textRef}>
-          {renderText(text.content, vocabFronts, onWordClick, onWordTouchStart, onWordTouchMove)}
-          <WordHighlightLegend showDay={false} />
-        </div>
+          {showText && (
+            <div className="reader-panel-text" ref={textRef}>
+              {renderText(text.content, vocabFronts, onWordClick, onWordTouchStart, onWordTouchMove)}
+            </div>
+          )}
+
+          {showText && (
+            <div className="reader-panel-footer">
+              <div className="reader-panel-legend" aria-label="Highlight legend">
+                <span className="reader-panel-legend-item">
+                  <span className="reader-panel-legend-dot is-saved" aria-hidden />
+                  <span className="reader-panel-legend-text-full">Saved vocab</span>
+                  <span className="reader-panel-legend-text-short">Saved</span>
+                </span>
+                <span className="reader-panel-legend-item">
+                  <span className="reader-panel-legend-dot is-audio" aria-hidden />
+                  <span className="reader-panel-legend-text-full">Now playing</span>
+                  <span className="reader-panel-legend-text-short">Playing</span>
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={toggleTranslation}
+                disabled={translating}
+                aria-expanded={translationOpen}
+                className={`translate-toggle${translationOpen ? ' is-active' : ''}`}
+              >
+                {translationOpen ? (
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="2" y1="12" x2="22" y2="12" />
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                  </svg>
+                )}
+                {translating ? (
+                  <span className="translate-toggle-text-full">Translating…</span>
+                ) : (
+                  <>
+                    <span className="translate-toggle-text-full">{translationOpen ? 'Hide translation' : 'Show translation'}</span>
+                    <span className="translate-toggle-text-short">{translationOpen ? 'Hide' : 'Translate'}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {showText && (
+            <div className={`reader-panel-translation${translationOpen && translation ? ' is-open' : ''}`} aria-hidden={!translationOpen}>
+              <div className="reader-panel-translation-inner">
+                <span className="reader-panel-translation-label">English translation</span>
+                <p className="reader-panel-translation-body">{translation}</p>
+              </div>
+            </div>
+          )}
+        </section>
       )}
 
       {effectiveMode === 'listen' && !revealText && audioCompleted && (
         <button onClick={() => setRevealText(true)} className="deck-btn">Reveal text</button>
       )}
 
-      {showText && (
-        <div className="translate-block">
-          <div className="translate-footer">
-            <div className="translate-legend" aria-label="Highlight legend">
-              <span className="translate-legend-item">
-                <span className="translate-legend-dot is-saved" aria-hidden />
-                <span className="translate-legend-text-full">Saved vocab</span>
-                <span className="translate-legend-text-short">Saved</span>
-              </span>
-              <span className="translate-legend-item">
-                <span className="translate-legend-dot is-audio" aria-hidden />
-                <span className="translate-legend-text-full">Now playing</span>
-                <span className="translate-legend-text-short">Playing</span>
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={toggleTranslation}
-              disabled={translating}
-              aria-expanded={translationOpen}
-              className={`translate-toggle${translationOpen ? ' is-active' : ''}`}
-            >
-              {translationOpen ? (
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="2" y1="12" x2="22" y2="12" />
-                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                </svg>
-              )}
-              {translating ? (
-                <span className="translate-toggle-text-full">Translating…</span>
-              ) : (
-                <>
-                  <span className="translate-toggle-text-full">{translationOpen ? 'Hide translation' : 'Show translation'}</span>
-                  <span className="translate-toggle-text-short">{translationOpen ? 'Hide' : 'Translate'}</span>
-                </>
-              )}
-            </button>
-          </div>
-          <div className={`translate-panel${translationOpen && translation ? ' is-open' : ''}`} aria-hidden={!translationOpen}>
-            <div className="translate-panel-inner">
-              <span className="translate-panel-label">
-                <span aria-hidden>🇬🇧</span>
-                English translation
-              </span>
-              <p className="translate-panel-body">{translation}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
       {text.questions.length > 0 && (
-        <>
-          <h2 className="section-title">Questions</h2>
+        <section className="questions-section">
+          <header className="questions-header">
+            <h2 className="questions-title">Questions</h2>
+            <span className="questions-count">{text.questions.length}</span>
+          </header>
           {questionsGated ? (
-            <p className="hint">Listen to the audio first. Questions appear after one full playback.</p>
+            <p className="hint questions-gated">Listen to the audio first. Questions appear after one full playback.</p>
           ) : (
-            <div className="form-row">
+            <div className="questions-list">
               {text.questions.map((q, idx) => (
                 <QuestionView
                   key={q.id}
@@ -334,19 +337,29 @@ export default function ReaderDetail() {
                   checked={checked}
                 />
               ))}
-              <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+              <div className="questions-actions">
                 {!checked ? (
-                  <button onClick={() => setChecked(true)} className="deck-btn primary">Check answers</button>
+                  <button onClick={() => setChecked(true)} className="deck-btn primary check-answers-btn">
+                    Check answers
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </button>
                 ) : (
                   <>
+                    {score && (
+                      <div className="questions-score">
+                        <span className="questions-score-label">Score</span>
+                        <span className="questions-score-value">{score.correct} / {score.total}</span>
+                      </div>
+                    )}
                     <button onClick={() => { setChecked(false); setAnswers({}) }} className="deck-btn">Reset</button>
-                    {score && <p style={{ margin: 0, alignSelf: 'center' }}>Score: <strong>{score.correct} / {score.total}</strong></p>}
                   </>
                 )}
               </div>
             </div>
           )}
-        </>
+        </section>
       )}
 
       {popup && (
@@ -381,66 +394,111 @@ interface QVProps {
 function QuestionView({ index, question, answer, onAnswer, checked }: QVProps) {
   const expected = (question.correctAnswer ?? '').trim().toLowerCase()
   const given = answer.trim().toLowerCase()
-  const isCorrect = checked && question.type !== 'FreeText' && given && expected && given === expected
-  const isWrong = checked && question.type !== 'FreeText' && !!given && !isCorrect
+  const gradable = question.type !== 'FreeText'
+  const isCorrect = checked && gradable && !!given && !!expected && given === expected
+  const isWrong = checked && gradable && !!given && !isCorrect
+
+  const typeLabel = question.type === 'MultipleChoice' ? 'Multiple choice'
+    : question.type === 'TrueFalse' ? 'True / false'
+    : question.type === 'ShortAnswer' ? 'Short answer'
+    : 'Open response'
 
   return (
-    <div className={`question-view ${isCorrect ? 'correct' : ''} ${isWrong ? 'wrong' : ''}`}>
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'baseline' }}>
-        <strong>Q{index + 1}.</strong>
-        <span>{question.prompt}</span>
-      </div>
+    <article className={`question-card${isCorrect ? ' is-correct' : ''}${isWrong ? ' is-wrong' : ''}${checked ? ' is-checked' : ''}`}>
+      <header className="question-card-head">
+        <span className="question-card-num">{index + 1}</span>
+        <div className="question-card-head-text">
+          <span className="question-card-type">{typeLabel}</span>
+          <p className="question-card-prompt">{question.prompt}</p>
+        </div>
+        {checked && gradable && (
+          <span className={`question-card-status${isCorrect ? ' is-correct' : ''}${isWrong ? ' is-wrong' : ''}`} aria-hidden>
+            {isCorrect ? (
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+            ) : (
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            )}
+          </span>
+        )}
+      </header>
 
       {question.type === 'MultipleChoice' && question.options && (
-        <div className="form-row" style={{ marginTop: '6px' }}>
-          {question.options.map((opt, i) => (
-            <label key={i} className="answer-option">
-              <input type="radio" name={question.id} checked={answer === opt} onChange={() => onAnswer(opt)} disabled={checked} />
-              <span>{opt}</span>
-              {checked && opt === question.correctAnswer && <span style={{ color: 'var(--accent)' }}>✓</span>}
-            </label>
-          ))}
+        <div className="question-card-options">
+          {question.options.map((opt, i) => {
+            const selected = answer === opt
+            const isAnswer = opt === question.correctAnswer
+            const cls = [
+              'question-option',
+              selected ? 'is-selected' : '',
+              checked && isAnswer ? 'is-answer' : '',
+              checked && selected && !isAnswer ? 'is-miss' : '',
+            ].filter(Boolean).join(' ')
+            return (
+              <label key={i} className={cls}>
+                <input type="radio" name={question.id} checked={selected} onChange={() => onAnswer(opt)} disabled={checked} />
+                <span className="question-option-marker" aria-hidden />
+                <span className="question-option-text">{opt}</span>
+              </label>
+            )
+          })}
         </div>
       )}
 
       {question.type === 'TrueFalse' && (
-        <div style={{ display: 'flex', gap: '12px', marginTop: '6px' }}>
-          {['Richtig', 'Falsch'].map(opt => (
-            <label key={opt} className="answer-option">
-              <input type="radio" name={question.id} checked={answer === opt} onChange={() => onAnswer(opt)} disabled={checked} />
-              <span>{opt}</span>
-              {checked && opt === question.correctAnswer && <span style={{ color: 'var(--accent)' }}>✓</span>}
-            </label>
-          ))}
+        <div className="question-card-tf">
+          {['Richtig', 'Falsch'].map(opt => {
+            const selected = answer === opt
+            const isAnswer = opt === question.correctAnswer
+            const cls = [
+              'question-tf-pill',
+              selected ? 'is-selected' : '',
+              checked && isAnswer ? 'is-answer' : '',
+              checked && selected && !isAnswer ? 'is-miss' : '',
+            ].filter(Boolean).join(' ')
+            return (
+              <label key={opt} className={cls}>
+                <input type="radio" name={question.id} checked={selected} onChange={() => onAnswer(opt)} disabled={checked} />
+                <span>{opt}</span>
+              </label>
+            )
+          })}
         </div>
       )}
 
       {question.type === 'ShortAnswer' && (
-        <input
-          type="text"
-          value={answer}
-          onChange={e => onAnswer(e.target.value)}
-          disabled={checked}
-          placeholder="Type answer..."
-          style={{ marginTop: '6px' }}
-        />
+        <div className="question-input-wrap">
+          <input
+            type="text"
+            className="question-input"
+            value={answer}
+            onChange={e => onAnswer(e.target.value)}
+            disabled={checked}
+            placeholder="Type your answer"
+          />
+        </div>
       )}
 
       {question.type === 'FreeText' && (
-        <textarea
-          value={answer}
-          onChange={e => onAnswer(e.target.value)}
-          rows={3}
-          disabled={checked}
-          placeholder="Type your answer..."
-          style={{ marginTop: '6px' }}
-        />
+        <div className="question-input-wrap">
+          <textarea
+            className="question-textarea"
+            value={answer}
+            onChange={e => onAnswer(e.target.value)}
+            rows={3}
+            disabled={checked}
+            placeholder="Write your response in German"
+          />
+          <span className="question-input-hint">Not auto-graded</span>
+        </div>
       )}
 
-      {checked && question.type !== 'FreeText' && question.correctAnswer && (
-        <p className="hint" style={{ marginTop: '4px' }}>Expected: <strong>{question.correctAnswer}</strong></p>
+      {checked && gradable && question.correctAnswer && !isCorrect && (
+        <p className="question-card-reveal">
+          <span>Correct answer</span>
+          <strong>{question.correctAnswer}</strong>
+        </p>
       )}
-    </div>
+    </article>
   )
 }
 
