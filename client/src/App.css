@@ -1245,6 +1245,7 @@ html[data-offline="true"] button:not(.offline-allow):not(.sheet-close) {
   font-weight: 600;
   font-size: 15px;
   flex-shrink: 0;
+  text-decoration: none;
 }
 
 .user-row-text {
