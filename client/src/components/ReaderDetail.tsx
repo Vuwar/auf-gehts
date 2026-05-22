@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { api, type ReadingText, type ReadingTextQuestion } from '../api'
 import { useAuth } from '../auth'
 import WordLookupPopup from './WordLookupPopup'
+import WordHighlightLegend from './WordHighlightLegend'
 import AudioPlayer from './AudioPlayer'
 import FilePicker from './FilePicker'
 import ConfirmationDialog from './ConfirmationDialog'
@@ -259,9 +260,12 @@ export default function ReaderDetail() {
       )}
 
       {showText && (
-        <div className="reader-text" ref={textRef}>
-          {renderText(text.content, vocabFronts, onWordClick, onWordTouchStart, onWordTouchMove)}
-        </div>
+        <>
+          <WordHighlightLegend showDay={false} />
+          <div className="reader-text" ref={textRef}>
+            {renderText(text.content, vocabFronts, onWordClick, onWordTouchStart, onWordTouchMove)}
+          </div>
+        </>
       )}
 
       {effectiveMode === 'listen' && !revealText && audioCompleted && (
@@ -463,7 +467,7 @@ function renderText(
           return (
             <span
               key={i}
-              className={`reader-word${isSaved ? ' saved' : ''}`}
+              className={`reader-word${isSaved ? ' is-saved' : ''}`}
               data-wi={myIdx}
               onClick={(e) => onClick(e, tok.text, sentence.trim())}
               onTouchStart={onTouchStart}
@@ -492,5 +496,8 @@ function tokenize(text: string): { text: string; isWord: boolean }[] {
 }
 
 function normalize(s: string): string {
-  return s.toLowerCase().replace(/^(der|die|das)\s+/, '').trim()
+  return s.toLowerCase()
+    .replace(/[.,!?;:"'()¡¿«»„""‚'…]/g, '')
+    .replace(/^(der|die|das)\s+/, '')
+    .trim()
 }

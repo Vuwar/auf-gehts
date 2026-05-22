@@ -5,6 +5,7 @@ import { useAuth } from '../auth'
 import { speakGerman, stopSpeaking, ttsAvailable } from '../tts'
 import AudioPlayer from './AudioPlayer'
 import WordLookupPopup from './WordLookupPopup'
+import WordHighlightLegend from './WordHighlightLegend'
 import { buildWordTimings, wordAtTime } from '../wordSync'
 import { PageSkeleton } from './Skeletons'
 import EditTagSheet from './EditTagSheet'
@@ -488,7 +489,8 @@ function Lesen({ text, words, onDone }: { text: TagDetail['readingText']; words:
   }
   return (
     <div className="form-row">
-      <p className="hint">Read along while audio plays. Today's words are highlighted. Tap any word for a lookup.</p>
+      <p className="hint">Read along while audio plays. Tap any word for a lookup.</p>
+      <WordHighlightLegend showDay />
       {text.audioUrl && (
         <AudioPlayer
           src={text.audioUrl}
@@ -514,7 +516,10 @@ function Lesen({ text, words, onDone }: { text: TagDetail['readingText']; words:
 }
 
 function normalizeWord(s: string): string {
-  return s.toLowerCase().replace(/^(der|die|das)\s+/, '').trim()
+  return s.toLowerCase()
+    .replace(/[.,!?;:"'()¡¿«»„""‚'…]/g, '')
+    .replace(/^(der|die|das)\s+/, '')
+    .trim()
 }
 
 function renderHighlighted(
@@ -540,7 +545,7 @@ function renderHighlighted(
         const norm = normalizeWord(token)
         const isDayVocab = wordSet.has(norm)
         const isSaved = vocab.has(norm)
-        const cls = `reader-word${isDayVocab ? ' day-vocab' : ''}${isSaved ? ' saved' : ''}`
+        const cls = `reader-word${isDayVocab ? ' is-day' : ''}${isSaved ? ' is-saved' : ''}`
         out.push(
           <span
             key={key++}
