@@ -16,7 +16,7 @@ export function wordAtTime(times: number[], currentTime: number): number {
   if (times.length === 0 || currentTime < 0) return -1
   let lo = 0, hi = times.length - 1
   while (lo < hi) {
-    const mid = (lo + hi + 1) | 0
+    const mid = (lo + hi + 1) >> 1
     if (times[mid] <= currentTime) lo = mid
     else hi = mid - 1
   }
