@@ -31,6 +31,8 @@ export default function ReaderDetail() {
   const [vocabFronts, setVocabFronts] = useState<Set<string>>(new Set())
 
   const [popup, setPopup] = useState<{ word: string; sentence: string | null; rect: DOMRect } | null>(null)
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null)
+  const touchScrolledRef = useRef(false)
 
   const [translation, setTranslation] = useState<string | null>(null)
   const [translating, setTranslating] = useState(false)
@@ -87,8 +89,29 @@ export default function ReaderDetail() {
   const effectiveMode: PassageMode = (mode === 'listen' && !text?.audioUrl) ? 'both' : mode
 
   const onWordClick = (e: React.MouseEvent<HTMLSpanElement>, word: string, sentence: string) => {
+    if (touchScrolledRef.current) {
+      touchScrolledRef.current = false
+      return
+    }
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     setPopup({ word, sentence, rect })
+  }
+
+  const onWordTouchStart = (e: React.TouchEvent<HTMLSpanElement>) => {
+    const t = e.touches[0]
+    if (!t) return
+    touchStartRef.current = { x: t.clientX, y: t.clientY }
+    touchScrolledRef.current = false
+  }
+
+  const onWordTouchMove = (e: React.TouchEvent<HTMLSpanElement>) => {
+    const start = touchStartRef.current
+    if (!start) return
+    const t = e.touches[0]
+    if (!t) return
+    const dx = Math.abs(t.clientX - start.x)
+    const dy = Math.abs(t.clientY - start.y)
+    if (dx > 8 || dy > 8) touchScrolledRef.current = true
   }
 
   const translateAll = async () => {
@@ -237,7 +260,7 @@ export default function ReaderDetail() {
 
       {showText && (
         <div className="reader-text" ref={textRef}>
-          {renderText(text.content, vocabFronts, onWordClick)}
+          {renderText(text.content, vocabFronts, onWordClick, onWordTouchStart, onWordTouchMove)}
         </div>
       )}
 
@@ -426,6 +449,8 @@ function renderText(
   content: string,
   vocab: Set<string>,
   onClick: (e: React.MouseEvent<HTMLSpanElement>, word: string, sentence: string) => void,
+  onTouchStart: (e: React.TouchEvent<HTMLSpanElement>) => void,
+  onTouchMove: (e: React.TouchEvent<HTMLSpanElement>) => void,
 ) {
   const sentences = content.split(/(?<=[.!?])\s+/)
   let wordIdx = 0
@@ -441,6 +466,8 @@ function renderText(
               className={`reader-word${isSaved ? ' saved' : ''}`}
               data-wi={myIdx}
               onClick={(e) => onClick(e, tok.text, sentence.trim())}
+              onTouchStart={onTouchStart}
+              onTouchMove={onTouchMove}
             >
               {tok.text}
             </span>

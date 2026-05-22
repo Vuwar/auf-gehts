@@ -54,13 +54,19 @@ export default function WordLookupPopup({ word, sentence, anchorRect, onClose, o
     }
   }
 
-  const style: React.CSSProperties = anchorRect
-    ? {
-        position: 'fixed',
-        top: anchorRect.bottom + 8,
-        left: Math.max(8, Math.min(window.innerWidth - 332, anchorRect.left)),
-      }
-    : { position: 'fixed', top: 80, left: 16 }
+  const style: React.CSSProperties = (() => {
+    if (!anchorRect) return { position: 'fixed', top: 80, left: 16 }
+    const popupWidth = 320
+    const estimatedHeight = 260
+    const margin = 8
+    const left = Math.max(margin, Math.min(window.innerWidth - popupWidth - margin, anchorRect.left))
+    const below = anchorRect.bottom + margin
+    const fitsBelow = below + estimatedHeight <= window.innerHeight - margin
+    const top = fitsBelow
+      ? below
+      : Math.max(margin, anchorRect.top - estimatedHeight - margin)
+    return { position: 'fixed', top, left }
+  })()
 
   return (
     <>
