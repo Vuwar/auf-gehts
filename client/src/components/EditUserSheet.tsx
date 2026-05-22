@@ -76,7 +76,7 @@ export default function EditUserSheet({ user, currentUserId, onClose, onUpdated,
           <div className="user-header-block">
             <div className="user-avatar-big">{(user.displayName ?? user.email)[0]?.toUpperCase()}</div>
             <div className="user-header-text">
-              <strong>{user.displayName || '—'}</strong>
+              <strong>{user.displayName || '-'}</strong>
               <span className="hint">{user.email}</span>
             </div>
           </div>

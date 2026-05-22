@@ -41,6 +41,15 @@ public class ReadingTextsController(ReadingTextService service, AiService ai) : 
         return t is null ? Forbid() : Ok(t);
     }
 
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<ReadingTextResponse>> Update(Guid id, [FromBody] UpdateReadingTextRequest req)
+    {
+        var userId = GetUserId();
+        if (userId is null) return Unauthorized();
+        var t = await service.UpdateAsync(id, req, userId.Value);
+        return t is null ? NotFound() : Ok(t);
+    }
+
     [HttpPost("generate-questions")]
     [EnableRateLimiting("ai")]
     public async Task<ActionResult<GeneratedQuestionsResponse>> GenerateQuestions([FromBody] GenerateQuestionsRequest req)

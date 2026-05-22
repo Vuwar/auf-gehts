@@ -62,7 +62,7 @@ export default function InstallPrompt() {
     }
     window.addEventListener('appinstalled', installedHandler)
 
-    // iOS Safari has no beforeinstallprompt — show manual hint.
+    // iOS Safari has no beforeinstallprompt; show manual hint.
     if (isIOS() && isSafari()) {
       setVisible(true)
       setShowIOSHint(true)

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, type ReadingText, type ReadingTextQuestion } from '../api'
 import { useAuth } from '../auth'
 import WordLookupPopup from './WordLookupPopup'
 import WordHighlightLegend from './WordHighlightLegend'
 import AudioPlayer from './AudioPlayer'
-import FilePicker from './FilePicker'
-import ConfirmationDialog from './ConfirmationDialog'
+import EditTextSheet from './EditTextSheet'
+import { PenIcon } from './EditSetSheet'
+import { LockIcon } from './Icons'
 import { PageSkeleton } from './Skeletons'
 import { buildWordTimings, wordAtTime } from '../wordSync'
 
@@ -45,8 +46,7 @@ export default function ReaderDetail() {
   const [mode, setMode] = useState<PassageMode>(loadInitialMode)
   const [audioCompleted, setAudioCompleted] = useState(false)
   const [revealText, setRevealText] = useState(false)
-  const [audioBusy, setAudioBusy] = useState(false)
-  const [confirmAction, setConfirmAction] = useState<'deleteText' | 'removeAudio' | null>(null)
+  const [editOpen, setEditOpen] = useState(false)
   const [audioDuration, setAudioDuration] = useState(0)
   const wordTimingsRef = useRef<number[]>([])
   const textRef = useRef<HTMLDivElement>(null)
@@ -131,50 +131,6 @@ export default function ReaderDetail() {
     } finally { setTranslating(false) }
   }
 
-  const onDelete = async () => {
-    if (!text) return
-    await api.deleteReadingText(text.id)
-    nav('/reader')
-  }
-
-  const regenerateAudio = async () => {
-    if (!text) return
-    setAudioBusy(true)
-    try {
-      const updated = await api.regeneratePassageAudio(text.id)
-      setText(updated)
-      setAudioCompleted(false)
-    } catch (e: any) {
-      alert(e.message)
-    } finally { setAudioBusy(false) }
-  }
-
-  const onUpload = async (file: File) => {
-    if (!text) return
-    setAudioBusy(true)
-    try {
-      const updated = await api.uploadPassageAudio(text.id, file)
-      setText(updated)
-      setAudioCompleted(false)
-    } catch (e: any) {
-      alert(e.message)
-    } finally {
-      setAudioBusy(false)
-    }
-  }
-
-  const removeAudio = async () => {
-    if (!text) return
-    setAudioBusy(true)
-    try {
-      await api.deletePassageAudio(text.id)
-      setText({ ...text, audioUrl: null, audioDurationSec: null, audioVoice: null })
-      setAudioCompleted(false)
-    } catch (e: any) {
-      alert(e.message)
-    } finally { setAudioBusy(false) }
-  }
-
   const score = useMemo(() => {
     if (!text || !checked) return null
     let correct = 0; let total = 0
@@ -194,7 +150,7 @@ export default function ReaderDetail() {
     <div className="deck">
       <div><button onClick={() => nav('/reader')} className="deck-btn offline-allow">← All texts</button></div>
       <div className="reader-locked">
-        <span className="reader-locked-icon" aria-hidden>🔒</span>
+        <span className="reader-locked-icon" aria-hidden><LockIcon size={32} /></span>
         <h2>{text.title}</h2>
         <p>Complete the day this text belongs to in order to unlock it.</p>
         {text.weekNumber && <p className="hint">Woche {text.weekNumber}</p>}
@@ -205,7 +161,7 @@ export default function ReaderDetail() {
   const showAudio = (effectiveMode === 'listen' || effectiveMode === 'both') && text.audioUrl
   const showText = effectiveMode === 'read' || effectiveMode === 'both' || (effectiveMode === 'listen' && revealText)
   const questionsGated = effectiveMode === 'listen' && !audioCompleted
-  const canManageAudio = isAdmin || text.isOwner
+  const canEdit = isAdmin || text.isOwner
 
   return (
     <div className="deck">
@@ -219,12 +175,16 @@ export default function ReaderDetail() {
           <div className="hint" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
             {text.level && <span className="starter-level">{text.level}</span>}
             {text.weekNumber !== null && <span>· Woche {text.weekNumber}</span>}
-            <span>· by {text.createdByName ?? 'Unknown'}</span>
+            {text.weekId === null && text.createdByUserId && text.createdByName && (
+              <span>· by <Link to={`/profile/${text.createdByUserId}`} className="creator-link">{text.createdByName}</Link></span>
+            )}
             {text.audioUrl && <span>· 🎧</span>}
           </div>
         </div>
-        {(isAdmin || text.isOwner) && (
-          <button onClick={() => setConfirmAction('deleteText')} className="deck-btn danger">Delete</button>
+        {canEdit && (
+          <button onClick={() => setEditOpen(true)} className="edit-icon-btn" aria-label="Edit text">
+            <PenIcon />
+          </button>
         )}
       </div>
 
@@ -331,33 +291,11 @@ export default function ReaderDetail() {
         </div>
       )}
 
-      {canManageAudio && (
-        <div className="passage-audio-admin">
-          <span className="card-label">Audio (admin)</span>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button onClick={regenerateAudio} disabled={audioBusy} className="deck-btn">
-              {audioBusy ? 'Working…' : (text.audioUrl ? 'Regenerate TTS' : 'Generate TTS')}
-            </button>
-            {text.audioUrl && (
-              <button onClick={() => setConfirmAction('removeAudio')} disabled={audioBusy} className="deck-btn danger">Remove audio</button>
-            )}
-          </div>
-          <FilePicker
-            accept="audio/mpeg,audio/mp3,audio/wav"
-            disabled={audioBusy}
-            onChange={f => { if (f) onUpload(f) }}
-            label="Upload audio file"
-            hint=".mp3 or .wav — replaces current audio"
-          />
-          {text.audioVoice && <p className="hint">Source: {text.audioVoice}</p>}
-        </div>
-      )}
-
       {text.questions.length > 0 && (
         <>
           <h2 className="section-title">Questions</h2>
           {questionsGated ? (
-            <p className="hint">Listen to the audio first — questions appear after one full playback.</p>
+            <p className="hint">Listen to the audio first. Questions appear after one full playback.</p>
           ) : (
             <div className="form-row">
               {text.questions.map((q, idx) => (
@@ -394,26 +332,14 @@ export default function ReaderDetail() {
           onSaved={(front) => setVocabFronts(new Set([...vocabFronts, normalize(front)]))}
         />
       )}
-      <ConfirmationDialog
-        open={confirmAction === 'deleteText'}
-        title="Delete text?"
-        message={`"${text.title}" and its questions will be permanently deleted.`}
-        confirmLabel="Delete text"
-        onCancel={() => setConfirmAction(null)}
-        onConfirm={onDelete}
-      />
-      <ConfirmationDialog
-        open={confirmAction === 'removeAudio'}
-        title="Remove audio?"
-        message="This removes the audio file from this passage. You can upload or generate a new one later."
-        confirmLabel="Remove audio"
-        busy={audioBusy}
-        onCancel={() => setConfirmAction(null)}
-        onConfirm={async () => {
-          await removeAudio()
-          setConfirmAction(null)
-        }}
-      />
+      {editOpen && (
+        <EditTextSheet
+          text={text}
+          onClose={() => setEditOpen(false)}
+          onUpdated={(t) => setText(t)}
+          onDeleted={() => { setEditOpen(false); nav('/reader') }}
+        />
+      )}
     </div>
   )
 }

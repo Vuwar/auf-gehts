@@ -134,6 +134,28 @@ public class ReadingTextService(
         return await GetAsync(entity.Id, userId);
     }
 
+    public async Task<ReadingTextResponse?> UpdateAsync(Guid id, UpdateReadingTextRequest req, Guid userId)
+    {
+        var user = await currentUser.GetAsync();
+        if (user?.Role == UserRole.ViewOnly) return null;
+        var entity = await db.ReadingTexts.FirstOrDefaultAsync(t => t.Id == id);
+        if (entity is null) return null;
+        if (user?.Role != UserRole.Admin && entity.CreatedByUserId != userId) return null;
+
+        if (!string.IsNullOrWhiteSpace(req.Title)) entity.Title = req.Title.Trim();
+        if (req.Content is not null && req.Content.Trim().Length > 0) entity.Content = req.Content;
+        if (req.Level is not null) entity.Level = req.Level;
+
+        if (user?.Role == UserRole.Admin)
+        {
+            if (req.ClearWeek) entity.WeekId = null;
+            else if (req.WeekId.HasValue) entity.WeekId = req.WeekId.Value;
+        }
+
+        await db.SaveChangesAsync();
+        return await GetAsync(entity.Id, userId);
+    }
+
     public async Task<ReadingTextResponse?> RegenerateAudioAsync(Guid id, Guid userId)
     {
         var (entity, allowed) = await LoadForAudioMutationAsync(id, userId);

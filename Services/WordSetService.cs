@@ -19,6 +19,7 @@ public class WordSetService(
     {
         var userProgress = await db.UserSetProgress
             .Include(p => p.WordSet).ThenInclude(s => s.Week)
+            .Include(p => p.WordSet).ThenInclude(s => s.CreatedByUser)
             .Where(p => p.UserId == userId
                 && (p.WordSet.IsPublic || p.WordSet.CreatedByUserId == userId))
             .OrderByDescending(p => p.LastReviewedAt)
@@ -26,6 +27,7 @@ public class WordSetService(
 
         var ownedRaw = await db.WordSets
             .Include(s => s.Week)
+            .Include(s => s.CreatedByUser)
             .Where(s => s.CreatedByUserId == userId && !s.IsOfficial)
             .OrderByDescending(s => s.CreatedAt)
             .Select(s => new { Set = s, WordCount = s.Words.Count })
@@ -84,6 +86,7 @@ public class WordSetService(
         var progressIds = progressMap.Keys.ToHashSet();
         var browseRaw = await db.WordSets
             .Include(s => s.Week)
+            .Include(s => s.CreatedByUser)
             .Where(s => s.IsPublic
                 && !s.IsOfficial
                 && s.CreatedByUserId != userId
@@ -150,6 +153,7 @@ public class WordSetService(
             IsPublic = req.IsPublic,
             IsOfficial = isOfficial,
             CreatedByUserId = userId,
+            CreatedByUser = user,
         };
         await sets.AddAsync(set);
         return (set.ToResponse(userId, 0), null);
@@ -233,6 +237,7 @@ public class WordSetService(
         if (user?.Role != UserRole.Admin) return [];
         var query = db.WordSets
             .Include(s => s.Week)
+            .Include(s => s.CreatedByUser)
             .Where(s => s.IsPublic);
         if (!string.IsNullOrWhiteSpace(q))
         {

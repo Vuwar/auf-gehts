@@ -149,7 +149,7 @@ public class WeekService(
             $"weekly:{week.Number}",
             weekId,
             week.Number,
-            $"Woche {week.Number} — All Words",
+            $"Woche {week.Number} - All Words",
             week.Description,
             null,
             false,
@@ -158,6 +158,8 @@ public class WeekService(
             false,
             wordCount,
             status.ToString(),
+            null,
+            null,
             week.CreatedAt
         );
     }

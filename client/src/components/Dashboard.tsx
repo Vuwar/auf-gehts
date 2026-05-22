@@ -4,6 +4,7 @@ import { api, type Dashboard as DashboardData, type Week } from '../api'
 import { useAuth } from '../auth'
 import ErrorView from './ErrorView'
 import { PageSkeleton } from './Skeletons'
+import { FlameIcon, LibraryIcon, ReaderBookIcon, MapIcon, AlphabetIcon } from './Icons'
 
 export default function Dashboard() {
   const { user, profile } = useAuth()
@@ -52,7 +53,7 @@ export default function Dashboard() {
       </div>
 
       <div className="streak-hero">
-        <span className="streak-hero-icon">🔥</span>
+        <span className="streak-hero-icon"><FlameIcon size={28} /></span>
         <div className="streak-hero-text">
           <strong>{currentStreak} day{currentStreak === 1 ? '' : 's'}</strong>
           <span className="hint">Current streak · longest {longestStreak}</span>
@@ -92,7 +93,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                   {f.currentStreak > 0 && (
-                    <span className="streak-badge">🔥 {f.currentStreak}</span>
+                    <span className="streak-badge"><FlameIcon size={14} /> {f.currentStreak}</span>
                   )}
                 </li>
               )
@@ -112,22 +113,22 @@ export default function Dashboard() {
       <h2 className="section-title">Quick actions</h2>
       <div className="action-grid">
         <button className="action-card" onClick={() => nav('/abenteuer')}>
-          <span className="action-icon">🗺️</span>
+          <span className="action-icon"><MapIcon size={28} /></span>
           <strong>Abenteuer</strong>
           <span className="hint">Course roadmap by week</span>
         </button>
         <button className="action-card" onClick={() => nav('/library')}>
-          <span className="action-icon">📚</span>
+          <span className="action-icon"><LibraryIcon size={28} /></span>
           <strong>Library</strong>
           <span className="hint">Active, completed, and your sets</span>
         </button>
         <button className="action-card" onClick={() => nav('/reader')}>
-          <span className="action-icon">📖</span>
+          <span className="action-icon"><ReaderBookIcon size={28} /></span>
           <strong>Reader</strong>
           <span className="hint">Paste/generate text, save words</span>
         </button>
         <button className="action-card" onClick={() => nav('/alphabet')}>
-          <span className="action-icon">🔤</span>
+          <span className="action-icon"><AlphabetIcon size={28} /></span>
           <strong>Alphabet</strong>
           <span className="hint">German letter pronunciation</span>
         </button>

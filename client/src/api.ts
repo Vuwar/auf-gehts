@@ -88,6 +88,8 @@ export interface WordSet {
   isFavorite: boolean
   wordCount: number
   progressStatus: 'NotStarted' | 'Active' | 'Completed'
+  createdByUserId: string | null
+  createdByName: string | null
   createdAt: string
 }
 
@@ -693,6 +695,17 @@ export const api = {
         weekId: data.weekId ?? null,
         generateAudio: data.generateAudio ?? true,
         questions: data.questions ?? null,
+      }),
+    }),
+  updateReadingText: (id: string, data: { title?: string; content?: string; level?: string | null; weekId?: string | null; clearWeek?: boolean }) =>
+    request<ReadingText>(`${API_BASE}/reading-texts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        title: data.title,
+        content: data.content,
+        level: data.level ?? null,
+        weekId: data.weekId ?? null,
+        clearWeek: data.clearWeek ?? false,
       }),
     }),
   regeneratePassageAudio: (id: string) =>

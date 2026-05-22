@@ -10,6 +10,7 @@ public class WordSetRepository(AppDbContext db) : IWordSetRepository
     {
         var rows = await db.WordSets
             .Include(s => s.Week)
+            .Include(s => s.CreatedByUser)
             .Where(s => s.IsPublic)
             .OrderByDescending(s => s.CreatedAt)
             .Select(s => new { Set = s, WordCount = s.Words.Count })
@@ -21,6 +22,7 @@ public class WordSetRepository(AppDbContext db) : IWordSetRepository
     {
         var rows = await db.WordSets
             .Include(s => s.Week)
+            .Include(s => s.CreatedByUser)
             .Where(s => s.CreatedByUserId == userId)
             .OrderByDescending(s => s.CreatedAt)
             .Select(s => new { Set = s, WordCount = s.Words.Count })
@@ -29,10 +31,10 @@ public class WordSetRepository(AppDbContext db) : IWordSetRepository
     }
 
     public Task<WordSet?> GetByIdAsync(Guid id) =>
-        db.WordSets.Include(s => s.Week).FirstOrDefaultAsync(s => s.Id == id);
+        db.WordSets.Include(s => s.Week).Include(s => s.CreatedByUser).FirstOrDefaultAsync(s => s.Id == id);
 
     public Task<WordSet?> GetBySlugAsync(string slug) =>
-        db.WordSets.Include(s => s.Week).FirstOrDefaultAsync(s => s.Slug == slug);
+        db.WordSets.Include(s => s.Week).Include(s => s.CreatedByUser).FirstOrDefaultAsync(s => s.Slug == slug);
 
     public Task<bool> SlugExistsAsync(string slug) =>
         db.WordSets.AnyAsync(s => s.Slug == slug);

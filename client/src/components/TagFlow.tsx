@@ -14,6 +14,7 @@ import EditTagSheet from './EditTagSheet'
 import CreateSetForWeekSheet from './CreateSetForWeekSheet'
 import AssignExistingSetSheet from './AssignExistingSetSheet'
 import { PenIcon } from './EditSetSheet'
+import { RotateIcon, SpeakerWaveIcon, LockIcon } from './Icons'
 import StatusIcon from './StatusIcon'
 
 const SKIPPED_STORAGE_PREFIX = 'tag-step-skipped:'
@@ -136,7 +137,7 @@ export default function TagFlow() {
     return (
       <div className="deck">
         <button onClick={() => nav(`/abenteuer/woche-${tag.weekNumber}`)} className="deck-btn offline-allow">← Woche {tag.weekNumber}</button>
-        <div className="deck-header"><h1>🔒 {tag.name}</h1></div>
+        <div className="deck-header"><h1 style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}><LockIcon size={20} /> {tag.name}</h1></div>
         <p className="empty-state">Complete the previous Tag to unlock this one.</p>
       </div>
     )
@@ -541,7 +542,7 @@ function Hoeren({ audioUrl, onDone }: { audioUrl: string | null; onDone: () => v
 
   return (
     <div className="form-row">
-      <p className="hint">Listen carefully — text hidden. Plays: {plays} / {maxPlays}</p>
+      <p className="hint">Listen carefully. Text hidden. Plays: {plays} / {maxPlays}</p>
       <AudioPlayer
         key={key}
         src={audioUrl}
@@ -550,8 +551,8 @@ function Hoeren({ audioUrl, onDone }: { audioUrl: string | null; onDone: () => v
       />
       <div style={{ display: 'flex', gap: '8px' }}>
         {plays > 0 && plays < maxPlays && (
-          <button onClick={() => setKey(k => k + 1)} className="deck-btn" style={{ flex: 1 }}>
-            🔁 Replay ({maxPlays - plays} left)
+          <button onClick={() => setKey(k => k + 1)} className="deck-btn icon-btn" style={{ flex: 1 }}>
+            <RotateIcon size={16} /> Replay ({maxPlays - plays} left)
           </button>
         )}
         <button onClick={onDone} disabled={plays === 0} className="deck-btn primary" style={{ flex: 1 }}>
@@ -873,7 +874,7 @@ function Nachsprechen({ text, onDone, onSkip }: { text: string; onDone: () => vo
         {current}
       </div>
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-        <button onClick={playSentence} className="deck-btn">🔊 Replay</button>
+        <button onClick={playSentence} className="deck-btn icon-btn"><SpeakerWaveIcon size={16} /> Replay</button>
         {!recording ? (
           <button onClick={startRecord} className="deck-btn primary">🎤 Record</button>
         ) : (
@@ -904,7 +905,7 @@ function Nachsprechen({ text, onDone, onSkip }: { text: string; onDone: () => vo
         I can't speak right now
       </button>
       <p className="hint" style={{ textAlign: 'center', fontSize: '11px' }}>
-        Skipped — not marked as completed.
+        Skipped. Not marked as completed.
       </p>
     </div>
   )

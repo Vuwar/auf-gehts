@@ -18,7 +18,7 @@ export default function RequestsBell() {
       const resp = await api.getFriendRequestCount()
       setCount(resp.incoming)
     } catch {
-      // ignore — silent retry on next tick
+      // ignore; silent retry on next tick
     }
   }, [])
 

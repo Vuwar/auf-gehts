@@ -60,6 +60,7 @@ public class TagService(
         var tag = await db.Tags
             .Include(t => t.Week)
             .Include(t => t.WordSet).ThenInclude(s => s!.Words)
+            .Include(t => t.WordSet).ThenInclude(s => s!.CreatedByUser)
             .Include(t => t.ReadingText).ThenInclude(r => r!.Questions)
             .FirstOrDefaultAsync(t => t.Id == tagId);
         if (tag is null) return null;

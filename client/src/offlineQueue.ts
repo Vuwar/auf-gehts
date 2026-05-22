@@ -32,7 +32,7 @@ function write(queue: QueuedRequest[]) {
   try {
     localStorage.setItem(QUEUE_KEY, JSON.stringify(queue))
   } catch {
-    // Quota exceeded — drop the oldest half rather than throw.
+    // Quota exceeded; drop the oldest half rather than throw.
     try {
       localStorage.setItem(QUEUE_KEY, JSON.stringify(queue.slice(Math.floor(queue.length / 2))))
     } catch { /* give up */ }

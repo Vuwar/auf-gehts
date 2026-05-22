@@ -14,5 +14,7 @@ public record WordSetResponse(
     bool IsFavorite,
     int WordCount,
     string ProgressStatus,
+    Guid? CreatedByUserId,
+    string? CreatedByName,
     DateTime CreatedAt
 );

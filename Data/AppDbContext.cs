@@ -59,7 +59,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                   .WithMany(w => w.WordSets)
                   .HasForeignKey(e => e.WeekId)
                   .OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne<User>()
+            entity.HasOne(e => e.CreatedByUser)
                   .WithMany()
                   .HasForeignKey(e => e.CreatedByUserId)
                   .OnDelete(DeleteBehavior.SetNull);

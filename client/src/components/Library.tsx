@@ -39,15 +39,21 @@ export default function Library() {
     <div className="deck">
       <div className="deck-header">
         <h1>Library</h1>
-        {canCreate && (
-          <button onClick={() => setCreating(true)} className="deck-btn primary">+ Create set</button>
-        )}
       </div>
 
       <Section title="Favorites" sets={data.favorites} emptyMsg="No favorites yet. Tap the heart on any set." onClick={s => nav(`/sets/${s.slug}`)} showMineChip />
       <Section title="My sets" sets={data.mine} emptyMsg="You haven't created any sets yet." onClick={s => nav(`/sets/${s.slug}`)} />
       <Section title="Completed" sets={data.completed} emptyMsg="No completed sets yet." onClick={s => nav(`/sets/${s.slug}`)} collapsible open={completedOpen} onToggle={() => setCompletedOpen(!completedOpen)} />
       <Section title="Browse sets" sets={data.browse} emptyMsg="No other public sets right now." onClick={s => nav(`/sets/${s.slug}`)} collapsible open={browseOpen} onToggle={() => setBrowseOpen(!browseOpen)} />
+
+      {canCreate && (
+        <button onClick={() => setCreating(true)} className="app-fab" aria-label="Create new set">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+      )}
 
       {creating && (
         <CreateSetSheet

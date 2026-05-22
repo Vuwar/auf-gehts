@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, type Word, type WordSet } from '../api'
 import { useAuth } from '../auth'
 import FlashCard from './FlashCard'
@@ -7,6 +7,7 @@ import EditSetSheet, { PenIcon } from './EditSetSheet'
 import HoldToConfirm from './HoldToConfirm'
 import ErrorView from './ErrorView'
 import SpeakerIcon from './SpeakerIcon'
+import { FlashcardIcon } from './Icons'
 import { PageSkeleton } from './Skeletons'
 import { speakGerman } from '../tts'
 
@@ -267,6 +268,9 @@ export default function WordSetView() {
           {set.level && <span className="meta-pill">{set.level}</span>}
           <span className="meta-pill">{set.isPublic ? 'Public' : 'Private'}</span>
           <span className="meta-pill">{words.length} {words.length === 1 ? 'word' : 'words'}</span>
+          {!set.isOfficial && set.createdByUserId && set.createdByName && (
+            <Link to={`/profile/${set.createdByUserId}`} className="meta-pill creator-pill">by {set.createdByName}</Link>
+          )}
           {set.progressStatus === 'Completed' && (
             <HoldToConfirm onConfirm={markActive} hint="Hold to revert">
               <span className="check-circle" aria-hidden="true">
@@ -287,7 +291,7 @@ export default function WordSetView() {
 
       {words.length > 0 && (
         <button onClick={startStudy} className="study-action">
-          <span className="study-action-icon">🎴</span>
+          <span className="study-action-icon"><FlashcardIcon size={26} /></span>
           <span className="study-action-body">
             <span className="study-action-title">Flashcards</span>
             <span className="study-action-sub">

@@ -135,7 +135,7 @@ export default function EditTagSheet({ tag, weekId, onClose, onUpdated, onDelete
               value={wordSetId ?? ''}
               onChange={e => setWordSetId(e.target.value || null)}
             >
-              <option value="">— none —</option>
+              <option value="">none</option>
               {availableSets.map(s => (
                 <option key={s.id} value={s.id}>{s.name} ({s.wordCount} words)</option>
               ))}

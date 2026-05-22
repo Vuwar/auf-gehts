@@ -48,7 +48,7 @@ export default function CreateSetSheet({ onClose, onCreated }: Props) {
         level,
         isPublic,
         isOfficial: isAdmin && isOfficial,
-        weekId: isAdmin ? (weekId || undefined) : undefined,
+        weekId: isAdmin && isOfficial ? (weekId || undefined) : undefined,
       })
       if (wordBuffer.length > 0) {
         try {
@@ -99,12 +99,9 @@ export default function CreateSetSheet({ onClose, onCreated }: Props) {
             </button>
 
             {isAdmin && (
-              <>
-                <span className="card-label">Admin: assign to week</span>
-                <select value={weekId} onChange={e => setWeekId(e.target.value)}>
-                  <option value="">Choose a week</option>
-                  {weeks.map(w => <option key={w.id} value={w.id}>Woche {w.number}: {w.title}</option>)}
-                </select>
+              <div className="form-row" style={{ borderColor: 'var(--accent-border)' }}>
+                <span className="card-label" style={{ color: 'var(--accent)' }}>Admin</span>
+
                 <button type="button" onClick={() => setIsOfficial(!isOfficial)} className="visibility-toggle">
                   <div className="visibility-toggle-text">
                     <span className="visibility-toggle-title">Official set</span>
@@ -114,7 +111,17 @@ export default function CreateSetSheet({ onClose, onCreated }: Props) {
                     <span className="visibility-switch-knob" />
                   </span>
                 </button>
-              </>
+
+                {isOfficial && (
+                  <>
+                    <span className="card-label">Assign to week</span>
+                    <select value={weekId} onChange={e => setWeekId(e.target.value)}>
+                      <option value="">Choose a week</option>
+                      {weeks.map(w => <option key={w.id} value={w.id}>Woche {w.number}: {w.title}</option>)}
+                    </select>
+                  </>
+                )}
+              </div>
             )}
 
             <button type="button" onClick={() => setAddOpen(!addOpen)} className="collapse-toggle">

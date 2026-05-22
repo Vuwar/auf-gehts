@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, type ReadingText, type ReadingTextQuestion, type ReadingQuestionType, type Week } from '../api'
+import { useAuth } from '../auth'
 import FilePicker from './FilePicker'
 
 interface Props {
@@ -27,6 +28,8 @@ const emptyQuestion = (): DraftQuestion => ({
 })
 
 export default function CreateTextSheet({ defaultWeekId, onClose, onCreated }: Props) {
+  const { profile } = useAuth()
+  const isAdmin = profile?.role === 'Admin'
   const [mode, setMode] = useState<Mode>('paste')
   const [step, setStep] = useState<1 | 2>(1)
 
@@ -34,6 +37,7 @@ export default function CreateTextSheet({ defaultWeekId, onClose, onCreated }: P
   const [title, setTitle] = useState('')
   const [level, setLevel] = useState('A2')
   const [weekId, setWeekId] = useState(defaultWeekId ?? '')
+  const [isOfficial, setIsOfficial] = useState(!!defaultWeekId)
   const [weeks, setWeeks] = useState<Week[]>([])
 
   const [topic, setTopic] = useState('')
@@ -102,7 +106,7 @@ export default function CreateTextSheet({ defaultWeekId, onClose, onCreated }: P
         title: title.trim(),
         content,
         level,
-        weekId: weekId || null,
+        weekId: isAdmin && isOfficial && weekId ? weekId : null,
         generateAudio: audioFile ? false : generateAudio,
         questions: questions
           .filter(q => q.prompt.trim().length > 0)
@@ -175,34 +179,81 @@ export default function CreateTextSheet({ defaultWeekId, onClose, onCreated }: P
                 {LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
               </select>
 
-              <span className="card-label">Assign to week (optional)</span>
-              <select value={weekId} onChange={e => setWeekId(e.target.value)}>
-                <option value="">— No week —</option>
-                {weeks.map(w => <option key={w.id} value={w.id}>Woche {w.number}: {w.title}</option>)}
-              </select>
+              {isAdmin && (
+                <div className="form-row" style={{ borderColor: 'var(--accent-border)' }}>
+                  <span className="card-label" style={{ color: 'var(--accent)' }}>Admin</span>
 
-              <span className="card-label">Audio</span>
-              <button
-                type="button"
-                onClick={() => { if (!audioFile) setGenerateAudio(!generateAudio) }}
-                disabled={audioFile !== null}
-                className="visibility-toggle"
-              >
-                <div className="visibility-toggle-text">
-                  <span className="visibility-toggle-title">Generate audio with TTS</span>
-                  <span className="visibility-toggle-sub">German voice. Disabled if you upload your own audio file.</span>
+                  <button type="button" onClick={() => setIsOfficial(!isOfficial)} className="visibility-toggle">
+                    <div className="visibility-toggle-text">
+                      <span className="visibility-toggle-title">{isOfficial ? 'Official text' : 'Community text'}</span>
+                      <span className="visibility-toggle-sub">{isOfficial ? 'Shows in Abenteuer week page' : 'Visible in Reader Community section'}</span>
+                    </div>
+                    <span className={`visibility-switch ${isOfficial ? 'on' : ''}`}>
+                      <span className="visibility-switch-knob" />
+                    </span>
+                  </button>
+
+                  {isOfficial && (
+                    <>
+                      <span className="card-label">Assign to week</span>
+                      <select value={weekId} onChange={e => setWeekId(e.target.value)}>
+                        <option value="">Choose a week</option>
+                        {weeks.map(w => <option key={w.id} value={w.id}>Woche {w.number}: {w.title}</option>)}
+                      </select>
+                    </>
+                  )}
+
+                  <span className="card-label">Audio</span>
+                  <button
+                    type="button"
+                    onClick={() => { if (!audioFile) setGenerateAudio(!generateAudio) }}
+                    disabled={audioFile !== null}
+                    className="visibility-toggle"
+                  >
+                    <div className="visibility-toggle-text">
+                      <span className="visibility-toggle-title">Generate audio with TTS</span>
+                      <span className="visibility-toggle-sub">German voice. Disabled if you upload your own audio file.</span>
+                    </div>
+                    <span className={`visibility-switch ${(generateAudio && !audioFile) ? 'on' : ''}`}>
+                      <span className="visibility-switch-knob" />
+                    </span>
+                  </button>
+                  <FilePicker
+                    accept="audio/mpeg,audio/mp3,audio/wav"
+                    file={audioFile}
+                    onChange={setAudioFile}
+                    label="Upload audio file"
+                    hint=".mp3 or .wav, max 5MB. Overrides TTS."
+                  />
                 </div>
-                <span className={`visibility-switch ${(generateAudio && !audioFile) ? 'on' : ''}`}>
-                  <span className="visibility-switch-knob" />
-                </span>
-              </button>
-              <FilePicker
-                accept="audio/mpeg,audio/mp3,audio/wav"
-                file={audioFile}
-                onChange={setAudioFile}
-                label="Upload audio file"
-                hint=".mp3 or .wav, max 5MB — overrides TTS"
-              />
+              )}
+
+              {!isAdmin && (
+                <>
+                  <span className="card-label">Audio</span>
+                  <button
+                    type="button"
+                    onClick={() => { if (!audioFile) setGenerateAudio(!generateAudio) }}
+                    disabled={audioFile !== null}
+                    className="visibility-toggle"
+                  >
+                    <div className="visibility-toggle-text">
+                      <span className="visibility-toggle-title">Generate audio with TTS</span>
+                      <span className="visibility-toggle-sub">German voice. Disabled if you upload your own audio file.</span>
+                    </div>
+                    <span className={`visibility-switch ${(generateAudio && !audioFile) ? 'on' : ''}`}>
+                      <span className="visibility-switch-knob" />
+                    </span>
+                  </button>
+                  <FilePicker
+                    accept="audio/mpeg,audio/mp3,audio/wav"
+                    file={audioFile}
+                    onChange={setAudioFile}
+                    label="Upload audio file"
+                    hint=".mp3 or .wav, max 5MB. Overrides TTS."
+                  />
+                </>
+              )}
 
               {error && <p style={{ color: 'var(--danger)', fontSize: '13px', margin: 0 }}>{error}</p>}
 
@@ -228,7 +279,7 @@ export default function CreateTextSheet({ defaultWeekId, onClose, onCreated }: P
                 <button onClick={addQuestion} className="deck-btn">+ Add manually</button>
               </div>
 
-              {questions.length === 0 && <p className="empty-state">No questions yet — publishing without is fine.</p>}
+              {questions.length === 0 && <p className="empty-state">No questions yet. Publishing without is fine.</p>}
 
               {questions.map((q, i) => (
                 <QuestionEditor
@@ -337,7 +388,7 @@ function QuestionEditor({ index, question, onChange, onRemove }: QEProps) {
       )}
 
       {question.type === 'FreeText' && (
-        <p className="hint">Open-ended question — not auto-graded.</p>
+        <p className="hint">Open-ended question. Not auto-graded.</p>
       )}
     </div>
   )

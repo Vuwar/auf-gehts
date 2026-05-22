@@ -176,7 +176,7 @@ export default function AdminLogs() {
               <tbody>
                 {stats.slowEndpoints.map(s => (
                   <tr key={s.endpoint ?? 'null'}>
-                    <td>{s.endpoint ?? '—'}</td>
+                    <td>{s.endpoint ?? '-'}</td>
                     <td>{s.count}</td>
                     <td>{Math.round(s.avgMs)}</td>
                     <td>{s.p95Ms}</td>
@@ -293,7 +293,7 @@ function LogRow({ entry }: { entry: LogEntry }) {
         <td>{time}</td>
         <td><span className={`log-level-badge level-${entry.level.toLowerCase()}`}>{entry.level[0]}</span></td>
         <td className="mono">{entry.eventType}</td>
-        <td className="mono">{entry.httpMethod ? `${entry.httpMethod} ` : ''}{entry.endpoint ?? '—'}</td>
+        <td className="mono">{entry.httpMethod ? `${entry.httpMethod} ` : ''}{entry.endpoint ?? '-'}</td>
         <td>{entry.durationMs ?? ''}</td>
         <td>{entry.statusCode ?? ''}</td>
         <td>{entry.concurrency ?? ''}</td>

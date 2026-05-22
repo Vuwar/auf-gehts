@@ -23,7 +23,7 @@ export default function OfflineIndicator() {
       className={`offline-banner ${state.online ? 'syncing' : 'offline'}`}
     >
       <span className="offline-dot" aria-hidden />
-      {!state.online && <span>You're offline — changes are unavailable until connection is restored</span>}
+      {!state.online && <span>You're offline. Changes are unavailable until connection is restored.</span>}
       {state.online && state.queued > 0 && <span>Back online · syncing {state.queued} pending change{state.queued !== 1 ? 's' : ''}…</span>}
     </div>
   )

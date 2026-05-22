@@ -216,7 +216,7 @@ function OwnProfileView() {
                   <li key={u.id} className="user-row" onClick={() => setEditingUser(u)}>
                     <span className="user-avatar">{(u.displayName ?? u.email)[0]?.toUpperCase()}</span>
                     <div className="user-row-text">
-                      <strong>{u.displayName || '—'}</strong>
+                      <strong>{u.displayName || '-'}</strong>
                       <span>{u.email}</span>
                     </div>
                     <span className="role-badge" style={{ color: badge.color, borderColor: badge.color }}>

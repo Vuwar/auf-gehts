@@ -20,6 +20,8 @@ public static class WordSetMapper
             isFavorite,
             wordCount,
             status.ToString(),
+            s.IsOfficial ? null : s.CreatedByUserId,
+            s.IsOfficial ? null : (s.CreatedByUser?.DisplayName ?? s.CreatedByUser?.Email),
             s.CreatedAt
         );
 

@@ -15,5 +15,6 @@ public class WordSet
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public Week? Week { get; set; }
+    public User? CreatedByUser { get; set; }
     public List<Word> Words { get; set; } = [];
 }
