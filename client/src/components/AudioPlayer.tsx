@@ -5,6 +5,7 @@ interface Props {
   onEnded?: () => void
   onTimeUpdate?: (currentTime: number) => void
   onDurationChange?: (duration: number) => void
+  restricted?: boolean
 }
 
 const SPEEDS = [0.75, 1, 1.25, 1.5]
@@ -17,7 +18,7 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-export default function AudioPlayer({ src, onEnded, onTimeUpdate, onDurationChange }: Props) {
+export default function AudioPlayer({ src, onEnded, onTimeUpdate, onDurationChange, restricted = false }: Props) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const [playing, setPlaying] = useState(false)
   const [current, setCurrent] = useState(0)
@@ -107,6 +108,7 @@ export default function AudioPlayer({ src, onEnded, onTimeUpdate, onDurationChan
   }
 
   const onSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (restricted) return
     const a = audioRef.current
     if (!a) return
     const next = Number(e.target.value)
@@ -190,17 +192,19 @@ export default function AudioPlayer({ src, onEnded, onTimeUpdate, onDurationChan
         <div className="audio-player-body">
           <div className="audio-player-row">
             <span className="audio-player-time">{formatTime(current)}</span>
-            <div className="audio-player-track">
+            <div className={`audio-player-track${restricted ? ' is-readonly' : ''}`}>
               <div className="audio-player-track-fill" style={{ width: `${progressPct}%` }} />
-              <input
-                type="range"
-                min={0}
-                max={duration || 0}
-                step={0.1}
-                value={current}
-                onChange={onSeek}
-                aria-label="Seek"
-              />
+              {!restricted && (
+                <input
+                  type="range"
+                  min={0}
+                  max={duration || 0}
+                  step={0.1}
+                  value={current}
+                  onChange={onSeek}
+                  aria-label="Seek"
+                />
+              )}
             </div>
             <span className="audio-player-time">{formatTime(duration)}</span>
           </div>
@@ -208,20 +212,24 @@ export default function AudioPlayer({ src, onEnded, onTimeUpdate, onDurationChan
       </div>
 
       <div className="audio-player-controls">
-        <button type="button" className="audio-player-control offline-allow" onClick={() => skip(-10)} aria-label="Back 10 seconds">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M11 17l-5-5 5-5" />
-            <path d="M18 17l-5-5 5-5" />
-          </svg>
-          <span>10s</span>
-        </button>
-        <button type="button" className="audio-player-control offline-allow" onClick={() => skip(10)} aria-label="Forward 10 seconds">
-          <span>10s</span>
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M13 17l5-5-5-5" />
-            <path d="M6 17l5-5-5-5" />
-          </svg>
-        </button>
+        {!restricted && (
+          <>
+            <button type="button" className="audio-player-control offline-allow" onClick={() => skip(-10)} aria-label="Back 10 seconds">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M11 17l-5-5 5-5" />
+                <path d="M18 17l-5-5 5-5" />
+              </svg>
+              <span>10s</span>
+            </button>
+            <button type="button" className="audio-player-control offline-allow" onClick={() => skip(10)} aria-label="Forward 10 seconds">
+              <span>10s</span>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M13 17l5-5-5-5" />
+                <path d="M6 17l5-5-5-5" />
+              </svg>
+            </button>
+          </>
+        )}
         <button type="button" className="audio-player-control audio-player-speed offline-allow" onClick={cycleSpeed} aria-label={`Playback speed ${speed}x`}>
           {speed}×
         </button>

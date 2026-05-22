@@ -4323,3 +4323,162 @@ input[type="checkbox"] {
   }
 }
 
+/* ── TagFlow refinements ─────────────────────────────────── */
+
+/* Segmented progress (Step 1, Step 2) */
+.step-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.step-progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--text);
+}
+.step-progress-label {
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  font-weight: 600;
+  color: var(--accent);
+  font-size: 11px;
+}
+.step-progress-count {
+  color: var(--text);
+}
+.step-progress-count strong {
+  color: var(--text-h);
+}
+.step-progress-segments {
+  display: flex;
+  gap: 4px;
+}
+.step-progress-seg {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border);
+  transition: background 0.2s;
+}
+.step-progress-seg.is-done {
+  background: var(--accent);
+  opacity: 0.7;
+}
+.step-progress-seg.is-current {
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-bg);
+}
+
+/* Neue Wörter card */
+.neue-woerter-card {
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  border-radius: 16px;
+  padding: 24px 20px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--shadow);
+}
+.neue-woerter-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.neue-woerter-front {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 600;
+  color: var(--text-h);
+  text-align: center;
+  word-break: break-word;
+}
+.neue-woerter-back {
+  margin: 0;
+  font-size: 18px;
+  color: var(--accent);
+  text-align: center;
+  font-weight: 500;
+}
+.neue-woerter-context {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text);
+  text-align: center;
+  font-style: italic;
+  opacity: 0.85;
+}
+
+/* Skipped step indicator (Overview) */
+.tag-step--skipped {
+  border-left: 3px dashed var(--border);
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent 0 6px,
+    color-mix(in srgb, var(--text) 6%, transparent) 6px 7px
+  );
+}
+.tag-step--skipped .tag-step-label {
+  color: var(--text);
+  opacity: 0.9;
+}
+.tag-step-skip-tag {
+  margin-left: auto;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 700;
+  color: var(--text);
+  background: transparent;
+  border: 1px dashed var(--border);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+/* Step 5 — unanswered question highlight */
+.question-view.unanswered {
+  border-color: var(--accent-border) !important;
+  box-shadow: 0 0 0 1px var(--accent-border) inset;
+  position: relative;
+}
+.question-missing-tag {
+  display: inline-block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-bottom: 6px;
+}
+.hint.hint-warn {
+  color: var(--accent);
+  font-weight: 500;
+  margin: 0;
+}
+
+/* Step 6 — can't-speak skip */
+.deck-btn.skip-btn {
+  background: transparent;
+  border: 1px dashed var(--border);
+  color: var(--text);
+  font-style: italic;
+}
+.deck-btn.skip-btn:hover:not(:disabled) {
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+/* Restricted audio player — non-scrubbable track */
+.audio-player-track.is-readonly {
+  cursor: default;
+  opacity: 0.85;
+}
+.audio-player-track.is-readonly .audio-player-track-fill {
+  cursor: default;
+}

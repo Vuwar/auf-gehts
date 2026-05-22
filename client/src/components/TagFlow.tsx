@@ -4,6 +4,8 @@ import { api, type Tag, type TagDetail, type Word, type ReadingTextQuestion } fr
 import { useAuth } from '../auth'
 import { speakGerman, stopSpeaking, ttsAvailable } from '../tts'
 import AudioPlayer from './AudioPlayer'
+import FlashCard from './FlashCard'
+import SpeakerIcon from './SpeakerIcon'
 import WordLookupPopup from './WordLookupPopup'
 import WordHighlightLegend from './WordHighlightLegend'
 import { buildWordTimings, wordAtTime } from '../wordSync'
@@ -13,6 +15,21 @@ import CreateSetForWeekSheet from './CreateSetForWeekSheet'
 import AssignExistingSetSheet from './AssignExistingSetSheet'
 import { PenIcon } from './EditSetSheet'
 import StatusIcon from './StatusIcon'
+
+const SKIPPED_STORAGE_PREFIX = 'tag-step-skipped:'
+
+function loadSkippedMask(tagId: string | undefined): number {
+  if (!tagId) return 0
+  try {
+    const v = localStorage.getItem(SKIPPED_STORAGE_PREFIX + tagId)
+    return v ? Number(v) || 0 : 0
+  } catch { return 0 }
+}
+
+function saveSkippedMask(tagId: string | undefined, mask: number) {
+  if (!tagId) return
+  try { localStorage.setItem(SKIPPED_STORAGE_PREFIX + tagId, String(mask)) } catch {}
+}
 
 const STEP_LABELS = [
   '1. Neue Wörter',
@@ -38,6 +55,7 @@ export default function TagFlow() {
   const [view, setView] = useState<View>('overview')
   const [stepIndex, setStepIndex] = useState(0)
   const [completedMask, setCompletedMask] = useState(0)
+  const [skippedMask, setSkippedMask] = useState(0)
   const [editingTag, setEditingTag] = useState(false)
   const [creatingSet, setCreatingSet] = useState(false)
   const [assigningExisting, setAssigningExisting] = useState(false)
@@ -45,6 +63,7 @@ export default function TagFlow() {
   useEffect(() => {
     if (!tagId) return
     setLoading(true)
+    setSkippedMask(loadSkippedMask(tagId))
     api.getTag(tagId).then(t => {
       setTag(t)
       setCompletedMask(t.completedStepsMask)
@@ -65,6 +84,11 @@ export default function TagFlow() {
     try {
       const r = await api.completeTagStep(tag.id, idx)
       setCompletedMask(r.completedStepsMask)
+      const nextSkipped = skippedMask & ~(1 << idx)
+      if (nextSkipped !== skippedMask) {
+        setSkippedMask(nextSkipped)
+        saveSkippedMask(tagId, nextSkipped)
+      }
       refreshProfile()
     } catch (e: any) {
       alert(e.message)
@@ -80,6 +104,16 @@ export default function TagFlow() {
     } else {
       setStepIndex(idx + 1)
     }
+  }
+
+  const skipCurrentStep = () => {
+    if (!tag) return
+    const idx = stepIndex
+    const next = skippedMask | (1 << idx)
+    setSkippedMask(next)
+    saveSkippedMask(tagId, next)
+    if (idx + 1 >= TOTAL_STEPS) setView('overview')
+    else setStepIndex(idx + 1)
   }
 
   const startOrResume = () => {
@@ -108,6 +142,7 @@ export default function TagFlow() {
         <Overview
           tag={tag}
           completedMask={completedMask}
+          skippedMask={skippedMask}
           isAdmin={isAdmin}
           onBack={() => nav(`/abenteuer/woche-${tag.weekNumber}`)}
           onStart={startOrResume}
@@ -147,6 +182,7 @@ export default function TagFlow() {
       tag={tag}
       stepIndex={stepIndex}
       onAdvance={advance}
+      onSkip={skipCurrentStep}
       onBack={() => setView('overview')}
     />
   )
@@ -181,6 +217,7 @@ function nextIncompleteStep(mask: number): number {
 interface OverviewProps {
   tag: TagDetail
   completedMask: number
+  skippedMask: number
   isAdmin: boolean
   onBack: () => void
   onStart: () => void
@@ -189,7 +226,7 @@ interface OverviewProps {
   onAssignExisting: () => void
 }
 
-function Overview({ tag, completedMask, isAdmin, onBack, onStart, onEdit, onCreateSet, onAssignExisting }: OverviewProps) {
+function Overview({ tag, completedMask, skippedMask, isAdmin, onBack, onStart, onEdit, onCreateSet, onAssignExisting }: OverviewProps) {
   const isStarted = completedMask !== 0
   const isComplete = completedMask === ALL_MASK
   const btnLabel = isComplete ? 'Wiederholen' : isStarted ? 'Weiter' : 'Los gehts'
@@ -213,10 +250,13 @@ function Overview({ tag, completedMask, isAdmin, onBack, onStart, onEdit, onCrea
       <ol className="tag-steps-list" style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {STEP_LABELS.map((lbl, i) => {
           const done = (completedMask & (1 << i)) !== 0
+          const skipped = !done && (skippedMask & (1 << i)) !== 0
+          const cls = `tag-step${done ? ' tag-step--done' : ''}${skipped ? ' tag-step--skipped' : ''}`
           return (
-            <li key={i} className={`tag-step${done ? ' tag-step--done' : ''}`}>
+            <li key={i} className={cls}>
               <StatusIcon status={done ? 'completed' : 'idle'} />
               <span className="tag-step-label">{lbl}</span>
+              {skipped && <span className="tag-step-skip-tag">Übersprungen</span>}
             </li>
           )
         })}
@@ -240,10 +280,11 @@ interface StepProps {
   tag: TagDetail
   stepIndex: number
   onAdvance: () => void
+  onSkip: () => void
   onBack: () => void
 }
 
-function StepView({ tag, stepIndex, onAdvance, onBack }: StepProps) {
+function StepView({ tag, stepIndex, onAdvance, onSkip, onBack }: StepProps) {
   return (
     <div className="deck">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -257,7 +298,7 @@ function StepView({ tag, stepIndex, onAdvance, onBack }: StepProps) {
       {stepIndex === 2 && <Hoeren audioUrl={tag.readingText?.audioUrl ?? null} onDone={onAdvance} />}
       {stepIndex === 3 && <Lesen text={tag.readingText} words={tag.words} onDone={onAdvance} />}
       {stepIndex === 4 && <Fragen questions={tag.readingText?.questions ?? []} onDone={onAdvance} />}
-      {stepIndex === 5 && <Nachsprechen text={tag.readingText?.content ?? ''} onDone={onAdvance} />}
+      {stepIndex === 5 && <Nachsprechen text={tag.readingText?.content ?? ''} onDone={onAdvance} onSkip={onSkip} />}
     </div>
   )
 }
@@ -279,18 +320,23 @@ function NeueWoerter({ words, onDone }: { words: Word[]; onDone: () => void }) {
   const w = words[i]
   const isLast = i === words.length - 1
 
-  const speak = () => speakGerman(w.front)
+  const speak = (e: React.MouseEvent) => { e.stopPropagation(); speakGerman(w.front) }
 
   return (
     <div className="form-row">
-      <div className="hint">Word {i + 1} / {words.length}</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', padding: '24px', border: '1px solid var(--border, #ddd)', borderRadius: '12px' }}>
-        <h2 style={{ margin: 0, fontSize: '32px' }}>{w.front}</h2>
-        {canSpeak && (
-          <button onClick={speak} className="deck-btn" aria-label="Hear pronunciation">🔊 Hören</button>
-        )}
-        <p style={{ margin: 0, fontSize: '18px', color: 'var(--muted, #666)' }}>{w.back}</p>
-        {w.context && <p className="hint" style={{ textAlign: 'center' }}>{w.context}</p>}
+      <StepProgress current={i + 1} total={words.length} label="Wort" />
+      <div className="neue-woerter-card">
+        <div className="neue-woerter-card-head">
+          <span className="card-label">Deutsch</span>
+          {canSpeak && (
+            <button onClick={speak} className="word-speaker" aria-label="Hear pronunciation" type="button">
+              <SpeakerIcon />
+            </button>
+          )}
+        </div>
+        <h2 className="neue-woerter-front">{w.front}</h2>
+        <p className="neue-woerter-back">{w.back}</p>
+        {w.context && <p className="neue-woerter-context">{w.context}</p>}
       </div>
       <button
         onClick={() => { stopSpeaking(); if (isLast) onDone(); else setI(i + 1) }}
@@ -303,13 +349,43 @@ function NeueWoerter({ words, onDone }: { words: Word[]; onDone: () => void }) {
   )
 }
 
+function StepProgress({ current, total, label }: { current: number; total: number; label?: string }) {
+  return (
+    <div className="step-progress" aria-label={`${label ?? 'Step'} ${current} of ${total}`}>
+      <div className="step-progress-head">
+        <span className="step-progress-label">{label ?? 'Step'}</span>
+        <span className="step-progress-count"><strong>{current}</strong> / {total}</span>
+      </div>
+      <div className="step-progress-segments" role="presentation">
+        {Array.from({ length: total }).map((_, idx) => (
+          <span
+            key={idx}
+            className={`step-progress-seg${idx < current - 1 ? ' is-done' : idx === current - 1 ? ' is-current' : ''}`}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function Flashcards({ words, onDone }: { words: Word[]; onDone: () => void }) {
   const [queue, setQueue] = useState<Word[]>([...words])
   const [wrongPile, setWrongPile] = useState<Word[]>([])
-  const [flipped, setFlipped] = useState(false)
   const [correctSet, setCorrectSet] = useState<Set<string>>(new Set())
+  const [finished, setFinished] = useState(false)
 
-  useEffect(() => { setQueue([...words]); setWrongPile([]); setFlipped(false); setCorrectSet(new Set()) }, [words])
+  useEffect(() => {
+    setQueue([...words])
+    setWrongPile([])
+    setCorrectSet(new Set())
+    setFinished(false)
+  }, [words])
+
+  const restart = () => {
+    setQueue([...words])
+    setWrongPile([])
+    setFinished(false)
+  }
 
   if (words.length === 0) {
     return (
@@ -320,17 +396,26 @@ function Flashcards({ words, onDone }: { words: Word[]; onDone: () => void }) {
     )
   }
 
-  if (queue.length === 0 && wrongPile.length === 0) {
+  const usingWrongPile = queue.length === 0
+  const remaining = queue.length + wrongPile.length
+  const total = words.length
+
+  if (finished || (queue.length === 0 && wrongPile.length === 0)) {
     return (
       <div className="form-row">
-        <p className="empty-state">✓ All words recalled correctly!</p>
-        <button onClick={onDone} className="deck-btn primary" style={{ width: '100%' }}>Continue →</button>
+        <p className="empty-state">✓ {correctSet.size} / {total} recalled</p>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={restart} className="deck-btn" style={{ flex: 1 }} type="button">
+            <RepeatIcon /> <span style={{ marginLeft: 6 }}>Wiederholen</span>
+          </button>
+          <button onClick={onDone} className="deck-btn primary" style={{ flex: 1 }}>Continue →</button>
+        </div>
+        <p className="hint" style={{ textAlign: 'center' }}>Fortschritt wird beibehalten.</p>
       </div>
     )
   }
 
   const current = queue[0] ?? wrongPile[0]
-  const usingWrongPile = queue.length === 0
 
   const answer = (correct: boolean) => {
     const next = usingWrongPile ? [...wrongPile] : [...queue]
@@ -345,36 +430,41 @@ function Flashcards({ words, onDone }: { words: Word[]; onDone: () => void }) {
     }
     if (usingWrongPile) setWrongPile(next)
     else setQueue(next)
-
-    if (next.length === 0 && !usingWrongPile && wrongPile.length === 0 && correct) {
-      // done
-    }
-    setFlipped(false)
   }
-
-  const total = words.length
-  const remaining = queue.length + wrongPile.length
 
   return (
     <div className="form-row">
-      <div className="hint">Remaining: {remaining} / {total} · ✓ {correctSet.size}</div>
-      <div
-        onClick={() => setFlipped(!flipped)}
-        style={{ cursor: 'pointer', padding: '32px', border: '1px solid var(--border, #ddd)', borderRadius: '12px', textAlign: 'center', minHeight: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      >
-        <div>
-          <span className="card-label">{flipped ? 'English' : 'German'}</span>
-          <h2 style={{ margin: '8px 0 0', fontSize: '28px' }}>{flipped ? current.back : current.front}</h2>
-          {!flipped && <p className="hint" style={{ marginTop: '8px' }}>Tap to reveal</p>}
+      <StepProgress current={total - remaining + 1} total={total} label="Karte" />
+      <div className="hint" style={{ textAlign: 'center' }}>✓ {correctSet.size} · Verbleibend {remaining}</div>
+      <div className="card-section">
+        <FlashCard key={current.id} front={current.front} back={current.back} />
+        <div className="grade-buttons">
+          <button onClick={() => answer(false)} className="grade-btn grade-miss" aria-label="I forgot" type="button">
+            <span className="grade-icon">✗</span>
+          </button>
+          <button onClick={() => answer(true)} className="grade-btn grade-learn" aria-label="I knew it" type="button">
+            <span className="grade-icon">✓</span>
+          </button>
         </div>
       </div>
-      {flipped && (
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={() => answer(false)} className="deck-btn danger" style={{ flex: 1 }}>✗ Falsch</button>
-          <button onClick={() => answer(true)} className="deck-btn primary" style={{ flex: 1 }}>✓ Richtig</button>
-        </div>
-      )}
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <button onClick={restart} className="deck-btn" style={{ flex: 1 }} type="button" aria-label="Restart deck">
+          <RepeatIcon /> <span style={{ marginLeft: 6 }}>Wiederholen</span>
+        </button>
+        <button onClick={() => setFinished(true)} className="deck-btn" style={{ flex: 1 }} type="button">Beenden</button>
+      </div>
     </div>
+  )
+}
+
+function RepeatIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ verticalAlign: 'middle' }}>
+      <polyline points="17 1 21 5 17 9" />
+      <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+      <polyline points="7 23 3 19 7 15" />
+      <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+    </svg>
   )
 }
 
@@ -398,6 +488,7 @@ function Hoeren({ audioUrl, onDone }: { audioUrl: string | null; onDone: () => v
       <AudioPlayer
         key={key}
         src={audioUrl}
+        restricted
         onEnded={() => setPlays(p => p + 1)}
       />
       <div style={{ display: 'flex', gap: '8px' }}>
@@ -493,6 +584,7 @@ function Lesen({ text, words, onDone }: { text: TagDetail['readingText']; words:
       {text.audioUrl && (
         <AudioPlayer
           src={text.audioUrl}
+          restricted
           onTimeUpdate={handleTimeUpdate}
           onDurationChange={setAudioDuration}
         />
@@ -570,6 +662,7 @@ function renderHighlighted(
 function Fragen({ questions, onDone }: { questions: ReadingTextQuestion[]; onDone: () => void }) {
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [checked, setChecked] = useState(false)
+  const [attemptedCheck, setAttemptedCheck] = useState(false)
 
   if (questions.length === 0) {
     return (
@@ -579,6 +672,10 @@ function Fragen({ questions, onDone }: { questions: ReadingTextQuestion[]; onDon
       </div>
     )
   }
+
+  const isAnswered = (q: ReadingTextQuestion) => (answers[q.id] ?? '').trim().length > 0
+  const unansweredCount = questions.filter(q => !isAnswered(q)).length
+  const allAnswered = unansweredCount === 0
 
   const score = checked ? questions.reduce((acc, q) => {
     if (q.type === 'FreeText') return acc
@@ -595,8 +692,10 @@ function Fragen({ questions, onDone }: { questions: ReadingTextQuestion[]; onDon
         const expected = (q.correctAnswer ?? '').trim().toLowerCase()
         const isCorrect = checked && q.type !== 'FreeText' && given && expected && given === expected
         const isWrong = checked && q.type !== 'FreeText' && !!given && !isCorrect
+        const isMissing = !checked && attemptedCheck && !isAnswered(q)
         return (
-          <div key={q.id} className={`question-view ${isCorrect ? 'correct' : ''} ${isWrong ? 'wrong' : ''}`} style={{ padding: '12px', border: '1px solid var(--border, #ddd)', borderRadius: '8px' }}>
+          <div key={q.id} className={`question-view ${isCorrect ? 'correct' : ''} ${isWrong ? 'wrong' : ''} ${isMissing ? 'unanswered' : ''}`} style={{ padding: '12px', border: '1px solid var(--border, #ddd)', borderRadius: '8px' }}>
+            {isMissing && <span className="question-missing-tag">Bitte beantworten</span>}
             <div><strong>Q{idx + 1}.</strong> {q.prompt}</div>
             {q.type === 'MultipleChoice' && q.options && q.options.map((opt, i) => (
               <label key={i} className="answer-option" style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
@@ -626,7 +725,19 @@ function Fragen({ questions, onDone }: { questions: ReadingTextQuestion[]; onDon
       })}
 
       {!checked ? (
-        <button onClick={() => setChecked(true)} className="deck-btn primary" style={{ width: '100%' }}>Check answers</button>
+        <>
+          {attemptedCheck && !allAnswered && (
+            <p className="hint hint-warn">Bitte alle {unansweredCount} offenen Fragen beantworten.</p>
+          )}
+          <button
+            onClick={() => { setAttemptedCheck(true); if (allAnswered) setChecked(true) }}
+            disabled={!allAnswered && attemptedCheck}
+            className="deck-btn primary"
+            style={{ width: '100%' }}
+          >
+            Check answers
+          </button>
+        </>
       ) : (
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           {totalGraded > 0 && <p style={{ margin: 0 }}>Score: <strong>{score} / {totalGraded}</strong></p>}
@@ -637,7 +748,7 @@ function Fragen({ questions, onDone }: { questions: ReadingTextQuestion[]; onDon
   )
 }
 
-function Nachsprechen({ text, onDone }: { text: string; onDone: () => void }) {
+function Nachsprechen({ text, onDone, onSkip }: { text: string; onDone: () => void; onSkip: () => void }) {
   const sentences = useMemo(() => {
     const all = text.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 0)
     return all.slice(0, Math.min(3, Math.max(2, all.length)))
@@ -727,6 +838,17 @@ function Nachsprechen({ text, onDone }: { text: string; onDone: () => void }) {
       >
         {isLast ? 'Finish Tag →' : 'Next sentence →'}
       </button>
+      <button
+        onClick={() => { try { recogRef.current?.stop?.() } catch {}; stopSpeaking(); onSkip() }}
+        className="deck-btn skip-btn"
+        style={{ width: '100%' }}
+        type="button"
+      >
+        Ich kann gerade nicht sprechen
+      </button>
+      <p className="hint" style={{ textAlign: 'center', fontSize: '11px' }}>
+        Übersprungen — nicht als abgeschlossen markiert.
+      </p>
     </div>
   )
 }
