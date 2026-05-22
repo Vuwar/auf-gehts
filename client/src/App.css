@@ -2196,30 +2196,41 @@ html[data-offline="true"] button:not(.offline-allow):not(.sheet-close) {
 }
 
 .passage-mode-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 3px;
+  gap: 2px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
 }
 
 .passage-mode-pill {
-  padding: 6px 14px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 7px;
   background: transparent;
-  color: var(--text-h);
-  font-size: 13px;
+  color: var(--text);
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
 
-.passage-mode-pill:hover {
-  background: var(--accent-bg);
+.passage-mode-pill svg {
+  display: block;
+}
+
+.passage-mode-pill:hover:not(.active) {
+  color: var(--text-h);
+  background: color-mix(in srgb, var(--accent-bg) 35%, transparent);
 }
 
 .passage-mode-pill.active {
   background: var(--accent);
-  border-color: var(--accent);
   color: white;
 }
 
@@ -3423,6 +3434,10 @@ input[type="checkbox"] {
   flex-shrink: 0;
 }
 
+.reader-panel-legend-dot.is-day {
+  background: #fbbf24;
+}
+
 .reader-panel-legend-dot.is-saved {
   background: #7F77DD;
 }
@@ -4329,6 +4344,272 @@ input[type="checkbox"] {
   to { opacity: 1; transform: translateY(0); }
 }
 
+.word-popup-translation {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.word-popup-translation-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.word-popup-translation-input {
+  flex: 1;
+  min-width: 0;
+  padding-right: 36px !important;
+  background: var(--bg);
+  cursor: default;
+  color: var(--text-h);
+}
+
+.word-popup-translation-row.is-editing .word-popup-translation-input {
+  background: var(--bg-elev);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-bg);
+  cursor: text;
+}
+
+.word-popup-edit-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.word-popup-edit-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
+.word-popup-translation-row.is-editing .word-popup-edit-btn {
+  color: var(--accent);
+}
+
+.question-card-missing {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  font-weight: 700;
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 50%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
+.question-card.is-missing {
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+}
+
+/* ── Audio source chooser ────────────────────────────────── */
+.audio-source-choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 480px) {
+  .audio-source-choices { grid-template-columns: 1fr; }
+}
+
+.audio-source-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s, transform 0.05s;
+}
+
+.audio-source-card:hover {
+  border-color: var(--accent-border);
+  background: color-mix(in srgb, var(--accent-bg) 30%, var(--bg-elev));
+}
+
+.audio-source-card:active {
+  transform: scale(0.995);
+}
+
+.audio-source-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.audio-source-card-title {
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.audio-source-card-sub {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.audio-source-active {
+  padding: 14px 16px;
+  border: 1px solid var(--accent-border);
+  border-radius: 12px;
+  background: var(--accent-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.audio-source-active-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.audio-source-active-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg-elev);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.audio-source-active-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.audio-source-active-body strong {
+  color: var(--text-h);
+}
+
+.audio-source-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.audio-source-card-upload.is-disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* ── AI suggest config modal ─────────────────────────────── */
+.ai-config-sheet {
+  max-width: 480px;
+}
+
+.ai-config-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ai-config-chip {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.ai-config-chip:hover:not(.is-active) {
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.ai-config-chip.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.ai-config-types {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-config-type {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text-h);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  text-align: left;
+}
+
+.ai-config-type:hover:not(.is-active) {
+  border-color: var(--accent-border);
+  background: color-mix(in srgb, var(--accent-bg) 30%, var(--bg-elev));
+}
+
+.ai-config-type.is-active {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.ai-config-type-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.ai-config-type.is-active .ai-config-type-check {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
+}
+
 /* Wider sheet variant for create-text modal */
 .sheet-wide {
   max-width: 720px;
@@ -4692,7 +4973,10 @@ input[type="checkbox"] {
 
 .question-input,
 .question-textarea {
+  display: block;
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -4719,8 +5003,13 @@ input[type="checkbox"] {
 .question-textarea {
   resize: vertical;
   min-height: 80px;
+  max-height: 320px;
   line-height: 1.55;
   font-family: inherit;
+}
+
+.question-card .question-input-wrap {
+  min-width: 0;
 }
 
 .question-input-hint {

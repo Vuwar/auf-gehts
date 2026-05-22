@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api, type Tag, type TagDetail, type Word, type ReadingTextQuestion } from '../api'
 import { useAuth } from '../auth'
@@ -7,7 +7,6 @@ import AudioPlayer from './AudioPlayer'
 import FlashCard from './FlashCard'
 import SpeakerIcon from './SpeakerIcon'
 import WordLookupPopup from './WordLookupPopup'
-import WordHighlightLegend from './WordHighlightLegend'
 import { buildWordTimings, wordAtTime } from '../wordSync'
 import { PageSkeleton } from './Skeletons'
 import EditTagSheet from './EditTagSheet'
@@ -15,6 +14,7 @@ import CreateSetForWeekSheet from './CreateSetForWeekSheet'
 import AssignExistingSetSheet from './AssignExistingSetSheet'
 import { PenIcon } from './EditSetSheet'
 import { RotateIcon, SpeakerWaveIcon, LockIcon } from './Icons'
+import QuestionCard from './QuestionCard'
 import StatusIcon from './StatusIcon'
 
 const SKIPPED_STORAGE_PREFIX = 'tag-step-skipped:'
@@ -567,10 +567,13 @@ function Lesen({ text, words, onDone }: { text: TagDetail['readingText']; words:
   const [audioDuration, setAudioDuration] = useState(0)
   const wordTimingsRef = useRef<number[]>([])
   const textRef = useRef<HTMLDivElement>(null)
+  const wordElsRef = useRef<HTMLElement[]>([])
   const lastSyncIdxRef = useRef(-1)
+  const pendingIdxRef = useRef(-1)
+  const rafIdRef = useRef(0)
   const wordSet = useMemo(() => new Set(words.map(w => normalizeWord(w.front))), [words])
   const [vocabFronts, setVocabFronts] = useState<Set<string>>(new Set())
-  const [popup, setPopup] = useState<{ word: string; sentence: string | null; rect: DOMRect } | null>(null)
+  const [popup, setPopup] = useState<{ word: string; sentence: string | null; el: HTMLElement } | null>(null)
   const touchStartRef = useRef<{ x: number; y: number } | null>(null)
   const touchScrolledRef = useRef(false)
 
@@ -583,23 +586,46 @@ function Lesen({ text, words, onDone }: { text: TagDetail['readingText']; words:
   useEffect(() => {
     wordTimingsRef.current = text?.content && audioDuration > 0
       ? buildWordTimings(text.content, audioDuration) : []
-    if (lastSyncIdxRef.current >= 0) {
-      textRef.current?.querySelector<HTMLElement>(`[data-wi="${lastSyncIdxRef.current}"]`)?.removeAttribute('data-synced')
+    const els = wordElsRef.current
+    if (lastSyncIdxRef.current >= 0 && els[lastSyncIdxRef.current]) {
+      els[lastSyncIdxRef.current].removeAttribute('data-synced')
     }
     lastSyncIdxRef.current = -1
   }, [text?.content, audioDuration])
 
+  useLayoutEffect(() => {
+    const c = textRef.current
+    if (!c) { wordElsRef.current = []; return }
+    const nodes = c.querySelectorAll<HTMLElement>('[data-wi]')
+    const arr: HTMLElement[] = new Array(nodes.length)
+    nodes.forEach(n => {
+      const i = Number(n.getAttribute('data-wi'))
+      if (!Number.isNaN(i)) arr[i] = n
+    })
+    wordElsRef.current = arr
+  }, [text?.content, vocabFronts, wordSet])
+
+  useEffect(() => () => {
+    if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current)
+  }, [])
+
   const handleTimeUpdate = useCallback((t: number) => {
-    const newIdx = wordAtTime(wordTimingsRef.current, t)
-    if (newIdx === lastSyncIdxRef.current) return
-    const container = textRef.current
-    if (container) {
-      if (lastSyncIdxRef.current >= 0)
-        container.querySelector<HTMLElement>(`[data-wi="${lastSyncIdxRef.current}"]`)?.removeAttribute('data-synced')
-      if (newIdx >= 0)
-        container.querySelector<HTMLElement>(`[data-wi="${newIdx}"]`)?.setAttribute('data-synced', '')
-    }
-    lastSyncIdxRef.current = newIdx
+    const times = wordTimingsRef.current
+    if (times.length === 0) return
+    const newIdx = wordAtTime(times, t)
+    if (newIdx === pendingIdxRef.current) return
+    pendingIdxRef.current = newIdx
+    if (rafIdRef.current) return
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = 0
+      const target = pendingIdxRef.current
+      const last = lastSyncIdxRef.current
+      if (target === last) return
+      const els = wordElsRef.current
+      if (last >= 0 && els[last]) els[last].removeAttribute('data-synced')
+      if (target >= 0 && els[target]) els[target].setAttribute('data-synced', '')
+      lastSyncIdxRef.current = target
+    })
   }, [])
 
   const onWordClick = (e: React.MouseEvent<HTMLSpanElement>, word: string, sentence: string) => {
@@ -607,8 +633,7 @@ function Lesen({ text, words, onDone }: { text: TagDetail['readingText']; words:
       touchScrolledRef.current = false
       return
     }
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    setPopup({ word, sentence, rect })
+    setPopup({ word, sentence, el: e.currentTarget as HTMLElement })
   }
 
   const onWordTouchStart = (e: React.TouchEvent<HTMLSpanElement>) => {
@@ -639,24 +664,46 @@ function Lesen({ text, words, onDone }: { text: TagDetail['readingText']; words:
   return (
     <div className="form-row">
       <p className="hint">Read along while audio plays. Tap any word for a lookup.</p>
-      {text.audioUrl && (
-        <AudioPlayer
-          src={text.audioUrl}
-          restricted
-          onTimeUpdate={handleTimeUpdate}
-          onDurationChange={setAudioDuration}
-        />
-      )}
-      <div ref={textRef} className="reader-text" style={{ padding: '16px', border: '1px solid var(--border, #ddd)', borderRadius: '8px', lineHeight: 1.7 }}>
-        {renderHighlighted(text.content, wordSet, vocabFronts, onWordClick, onWordTouchStart, onWordTouchMove)}
-        <WordHighlightLegend showDay />
-      </div>
+      <section className="reader-panel" aria-label="Reading passage">
+        {text.audioUrl && (
+          <div className="reader-panel-audio">
+            <AudioPlayer
+              src={text.audioUrl}
+              restricted
+              onTimeUpdate={handleTimeUpdate}
+              onDurationChange={setAudioDuration}
+            />
+          </div>
+        )}
+        <div ref={textRef} className="reader-panel-text">
+          {renderHighlighted(text.content, wordSet, vocabFronts, onWordClick, onWordTouchStart, onWordTouchMove)}
+        </div>
+        <div className="reader-panel-footer">
+          <div className="reader-panel-legend" aria-label="Highlight legend">
+            <span className="reader-panel-legend-item">
+              <span className="reader-panel-legend-dot is-day" aria-hidden />
+              <span className="reader-panel-legend-text-full">Today's words</span>
+              <span className="reader-panel-legend-text-short">Today</span>
+            </span>
+            <span className="reader-panel-legend-item">
+              <span className="reader-panel-legend-dot is-saved" aria-hidden />
+              <span className="reader-panel-legend-text-full">Saved vocab</span>
+              <span className="reader-panel-legend-text-short">Saved</span>
+            </span>
+            <span className="reader-panel-legend-item">
+              <span className="reader-panel-legend-dot is-audio" aria-hidden />
+              <span className="reader-panel-legend-text-full">Now playing</span>
+              <span className="reader-panel-legend-text-short">Playing</span>
+            </span>
+          </div>
+        </div>
+      </section>
       <button onClick={onDone} className="deck-btn primary" style={{ width: '100%' }}>Continue →</button>
       {popup && (
         <WordLookupPopup
           word={popup.word}
           sentence={popup.sentence}
-          anchorRect={popup.rect}
+          anchorEl={popup.el}
           onClose={() => setPopup(null)}
           onSaved={(front) => setVocabFronts(new Set([...vocabFronts, normalizeWord(front)]))}
         />
@@ -744,65 +791,55 @@ function Fragen({ questions, onDone }: { questions: ReadingTextQuestion[]; onDon
   const totalGraded = questions.filter(q => q.type !== 'FreeText').length
 
   return (
-    <div className="form-row">
-      {questions.map((q, idx) => {
-        const given = (answers[q.id] ?? '').trim().toLowerCase()
-        const expected = (q.correctAnswer ?? '').trim().toLowerCase()
-        const isCorrect = checked && q.type !== 'FreeText' && given && expected && given === expected
-        const isWrong = checked && q.type !== 'FreeText' && !!given && !isCorrect
-        const isMissing = !checked && attemptedCheck && !isAnswered(q)
-        return (
-          <div key={q.id} className={`question-view ${isCorrect ? 'correct' : ''} ${isWrong ? 'wrong' : ''} ${isMissing ? 'unanswered' : ''}`} style={{ padding: '12px', border: '1px solid var(--border, #ddd)', borderRadius: '8px' }}>
-            {isMissing && <span className="question-missing-tag">Please answer</span>}
-            <div><strong>Q{idx + 1}.</strong> {q.prompt}</div>
-            {q.type === 'MultipleChoice' && q.options && q.options.map((opt, i) => (
-              <label key={i} className="answer-option" style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
-                <input type="radio" name={q.id} checked={answers[q.id] === opt} onChange={() => setAnswers({ ...answers, [q.id]: opt })} disabled={checked} />
-                <span>{opt}</span>
-                {checked && opt === q.correctAnswer && <span style={{ color: 'var(--accent)' }}>✓</span>}
-              </label>
-            ))}
-            {q.type === 'TrueFalse' && ['Richtig', 'Falsch'].map(opt => (
-              <label key={opt} className="answer-option" style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
-                <input type="radio" name={q.id} checked={answers[q.id] === opt} onChange={() => setAnswers({ ...answers, [q.id]: opt })} disabled={checked} />
-                <span>{opt}</span>
-                {checked && opt === q.correctAnswer && <span style={{ color: 'var(--accent)' }}>✓</span>}
-              </label>
-            ))}
-            {q.type === 'ShortAnswer' && (
-              <input type="text" value={answers[q.id] ?? ''} onChange={e => setAnswers({ ...answers, [q.id]: e.target.value })} disabled={checked} style={{ marginTop: '6px' }} />
-            )}
-            {q.type === 'FreeText' && (
-              <textarea value={answers[q.id] ?? ''} onChange={e => setAnswers({ ...answers, [q.id]: e.target.value })} rows={3} disabled={checked} style={{ marginTop: '6px' }} />
-            )}
-            {checked && q.correctAnswer && q.type !== 'FreeText' && (
-              <p className="hint" style={{ marginTop: '4px' }}>Expected: <strong>{q.correctAnswer}</strong></p>
-            )}
-          </div>
-        )
-      })}
+    <section className="questions-section">
+      <header className="questions-header">
+        <h2 className="questions-title">Fragen</h2>
+        <span className="questions-count">{questions.length}</span>
+      </header>
+      <div className="questions-list">
+        {questions.map((q, idx) => (
+          <QuestionCard
+            key={q.id}
+            index={idx}
+            question={q}
+            answer={answers[q.id] ?? ''}
+            onAnswer={val => setAnswers({ ...answers, [q.id]: val })}
+            checked={checked}
+            isMissing={!checked && attemptedCheck && !isAnswered(q)}
+          />
+        ))}
 
-      {!checked ? (
-        <>
-          {attemptedCheck && !allAnswered && (
-            <p className="hint hint-warn">Please answer all {unansweredCount} remaining {unansweredCount === 1 ? 'question' : 'questions'}.</p>
-          )}
-          <button
-            onClick={() => { setAttemptedCheck(true); if (allAnswered) setChecked(true) }}
-            disabled={!allAnswered && attemptedCheck}
-            className="deck-btn primary"
-            style={{ width: '100%' }}
-          >
-            Check answers
-          </button>
-        </>
-      ) : (
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {totalGraded > 0 && <p style={{ margin: 0 }}>Score: <strong>{score} / {totalGraded}</strong></p>}
-          <button onClick={onDone} className="deck-btn primary" style={{ flex: 1 }}>Continue →</button>
-        </div>
-      )}
-    </div>
+        {!checked ? (
+          <div className="questions-actions">
+            {attemptedCheck && !allAnswered && (
+              <p className="hint hint-warn" style={{ marginRight: 'auto' }}>
+                Answer all {unansweredCount} remaining {unansweredCount === 1 ? 'question' : 'questions'}.
+              </p>
+            )}
+            <button
+              onClick={() => { setAttemptedCheck(true); if (allAnswered) setChecked(true) }}
+              disabled={!allAnswered && attemptedCheck}
+              className="deck-btn primary check-answers-btn"
+            >
+              Check answers
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </button>
+          </div>
+        ) : (
+          <div className="questions-actions">
+            {totalGraded > 0 && (
+              <div className="questions-score">
+                <span className="questions-score-label">Score</span>
+                <span className="questions-score-value">{score} / {totalGraded}</span>
+              </div>
+            )}
+            <button onClick={onDone} className="deck-btn primary">Continue →</button>
+          </div>
+        )}
+      </div>
+    </section>
   )
 }
 

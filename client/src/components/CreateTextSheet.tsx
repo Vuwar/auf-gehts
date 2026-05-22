@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, type ReadingText, type ReadingTextQuestion, type ReadingQuestionType, type Week } from '../api'
 import { useAuth } from '../auth'
-import FilePicker from './FilePicker'
 
 interface Props {
   defaultWeekId?: string
@@ -46,6 +45,7 @@ export default function CreateTextSheet({ defaultWeekId, onClose, onCreated }: P
 
   const [questions, setQuestions] = useState<DraftQuestion[]>([])
   const [suggesting, setSuggesting] = useState(false)
+  const [aiConfigOpen, setAiConfigOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -79,12 +79,17 @@ export default function CreateTextSheet({ defaultWeekId, onClose, onCreated }: P
     }
   }
 
-  const suggestQuestions = async () => {
+  const suggestQuestions = async (cfg: { level: string; count: number; types: ReadingQuestionType[] }) => {
     if (!content.trim()) return
+    setAiConfigOpen(false)
     setSuggesting(true); setError(null)
     try {
-      const r = await api.generateQuestions(content, level, 4)
-      setQuestions(r.questions.map(q => questionFromApi(q)))
+      const r = await api.generateQuestions(content, cfg.level, cfg.count)
+      const allowed = new Set<ReadingQuestionType>(cfg.types)
+      const filtered = r.questions
+        .map(q => questionFromApi(q))
+        .filter(q => allowed.has(q.type))
+      setQuestions(filtered.length > 0 ? filtered : r.questions.map(q => questionFromApi(q)))
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -204,26 +209,11 @@ export default function CreateTextSheet({ defaultWeekId, onClose, onCreated }: P
                   )}
 
                   <span className="card-label">Audio</span>
-                  <button
-                    type="button"
-                    onClick={() => { if (!audioFile) setGenerateAudio(!generateAudio) }}
-                    disabled={audioFile !== null}
-                    className="visibility-toggle"
-                  >
-                    <div className="visibility-toggle-text">
-                      <span className="visibility-toggle-title">Generate audio with TTS</span>
-                      <span className="visibility-toggle-sub">German voice. Disabled if you upload your own audio file.</span>
-                    </div>
-                    <span className={`visibility-switch ${(generateAudio && !audioFile) ? 'on' : ''}`}>
-                      <span className="visibility-switch-knob" />
-                    </span>
-                  </button>
-                  <FilePicker
-                    accept="audio/mpeg,audio/mp3,audio/wav"
-                    file={audioFile}
-                    onChange={setAudioFile}
-                    label="Upload audio file"
-                    hint=".mp3 or .wav, max 5MB. Overrides TTS."
+                  <AudioSourceChooser
+                    generateAudio={generateAudio}
+                    setGenerateAudio={setGenerateAudio}
+                    audioFile={audioFile}
+                    setAudioFile={setAudioFile}
                   />
                 </div>
               )}
@@ -231,26 +221,11 @@ export default function CreateTextSheet({ defaultWeekId, onClose, onCreated }: P
               {!isAdmin && (
                 <>
                   <span className="card-label">Audio</span>
-                  <button
-                    type="button"
-                    onClick={() => { if (!audioFile) setGenerateAudio(!generateAudio) }}
-                    disabled={audioFile !== null}
-                    className="visibility-toggle"
-                  >
-                    <div className="visibility-toggle-text">
-                      <span className="visibility-toggle-title">Generate audio with TTS</span>
-                      <span className="visibility-toggle-sub">German voice. Disabled if you upload your own audio file.</span>
-                    </div>
-                    <span className={`visibility-switch ${(generateAudio && !audioFile) ? 'on' : ''}`}>
-                      <span className="visibility-switch-knob" />
-                    </span>
-                  </button>
-                  <FilePicker
-                    accept="audio/mpeg,audio/mp3,audio/wav"
-                    file={audioFile}
-                    onChange={setAudioFile}
-                    label="Upload audio file"
-                    hint=".mp3 or .wav, max 5MB. Overrides TTS."
+                  <AudioSourceChooser
+                    generateAudio={generateAudio}
+                    setGenerateAudio={setGenerateAudio}
+                    audioFile={audioFile}
+                    setAudioFile={setAudioFile}
                   />
                 </>
               )}
@@ -273,11 +248,18 @@ export default function CreateTextSheet({ defaultWeekId, onClose, onCreated }: P
             <div className="form-row">
               <p className="hint">Add comprehension questions. Or let AI suggest some, then edit.</p>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button onClick={suggestQuestions} disabled={suggesting} className="deck-btn">
-                  {suggesting ? 'Generating...' : '✨ AI suggest'}
+                <button onClick={() => setAiConfigOpen(true)} disabled={suggesting} className="deck-btn">
+                  {suggesting ? 'Generating...' : 'AI suggest'}
                 </button>
                 <button onClick={addQuestion} className="deck-btn">+ Add manually</button>
               </div>
+              {aiConfigOpen && (
+                <AiSuggestConfig
+                  defaultLevel={level}
+                  onCancel={() => setAiConfigOpen(false)}
+                  onConfirm={suggestQuestions}
+                />
+              )}
 
               {questions.length === 0 && <p className="empty-state">No questions yet. Publishing without is fine.</p>}
 
@@ -390,6 +372,195 @@ function QuestionEditor({ index, question, onChange, onRemove }: QEProps) {
       {question.type === 'FreeText' && (
         <p className="hint">Open-ended question. Not auto-graded.</p>
       )}
+    </div>
+  )
+}
+
+interface AiSuggestConfigProps {
+  defaultLevel: string
+  onCancel: () => void
+  onConfirm: (cfg: { level: string; count: number; types: ReadingQuestionType[] }) => void
+}
+
+function AiSuggestConfig({ defaultLevel, onCancel, onConfirm }: AiSuggestConfigProps) {
+  const [level, setLevel] = useState(defaultLevel)
+  const [count, setCount] = useState(4)
+  const [types, setTypes] = useState<Set<ReadingQuestionType>>(new Set(['MultipleChoice', 'TrueFalse', 'ShortAnswer']))
+
+  const toggleType = (t: ReadingQuestionType) => {
+    const next = new Set(types)
+    if (next.has(t)) next.delete(t); else next.add(t)
+    setTypes(next)
+  }
+
+  const canSubmit = types.size > 0 && count > 0
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onCancel])
+
+  return (
+    <div className="sheet-overlay" onClick={onCancel}>
+      <div className="sheet ai-config-sheet" onClick={e => e.stopPropagation()}>
+        <header className="sheet-header">
+          <h2>AI suggest options</h2>
+          <button onClick={onCancel} className="sheet-close" aria-label="Close">×</button>
+        </header>
+        <div className="sheet-body">
+          <div className="form-row">
+            <span className="card-label">Difficulty</span>
+            <div className="ai-config-chips">
+              {LEVELS.map(l => (
+                <button
+                  key={l}
+                  type="button"
+                  className={`ai-config-chip${level === l ? ' is-active' : ''}`}
+                  onClick={() => setLevel(l)}
+                >{l}</button>
+              ))}
+            </div>
+
+            <span className="card-label">Question types</span>
+            <div className="ai-config-types">
+              {([
+                ['MultipleChoice', 'Multiple choice'],
+                ['TrueFalse', 'True / false'],
+                ['ShortAnswer', 'Short answer'],
+              ] as [ReadingQuestionType, string][]).map(([t, label]) => (
+                <button
+                  key={t}
+                  type="button"
+                  className={`ai-config-type${types.has(t) ? ' is-active' : ''}`}
+                  onClick={() => toggleType(t)}
+                >
+                  <span className="ai-config-type-check" aria-hidden>
+                    {types.has(t) && (
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                  </span>
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+
+            <span className="card-label">Number of questions</span>
+            <div className="ai-config-chips">
+              {[3, 4, 5, 6].map(n => (
+                <button
+                  key={n}
+                  type="button"
+                  className={`ai-config-chip${count === n ? ' is-active' : ''}`}
+                  onClick={() => setCount(n)}
+                >{n}</button>
+              ))}
+            </div>
+
+            <div className="edit-action-row">
+              <button onClick={onCancel} className="deck-btn">Cancel</button>
+              <button
+                onClick={() => onConfirm({ level, count, types: Array.from(types) })}
+                disabled={!canSubmit}
+                className="deck-btn primary"
+              >
+                Generate
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+interface AudioSourceChooserProps {
+  generateAudio: boolean
+  setGenerateAudio: (v: boolean) => void
+  audioFile: File | null
+  setAudioFile: (f: File | null) => void
+}
+
+function AudioSourceChooser({ generateAudio, setGenerateAudio, audioFile, setAudioFile }: AudioSourceChooserProps) {
+  if (audioFile) {
+    return (
+      <div className="audio-source-active">
+        <div className="audio-source-active-row">
+          <div className="audio-source-active-icon" aria-hidden>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+              <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
+            </svg>
+          </div>
+          <div className="audio-source-active-body">
+            <strong>Custom audio file</strong>
+            <span className="hint">{audioFile.name}</span>
+          </div>
+          <button type="button" className="deck-btn danger" onClick={() => setAudioFile(null)}>Remove</button>
+        </div>
+        <p className="hint">TTS generation is disabled while a custom file is queued.</p>
+      </div>
+    )
+  }
+
+  if (generateAudio) {
+    return (
+      <div className="audio-source-active">
+        <div className="audio-source-active-row">
+          <div className="audio-source-active-icon" aria-hidden>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+              <path d="M18.5 5.5a9 9 0 0 1 0 13" />
+            </svg>
+          </div>
+          <div className="audio-source-active-body">
+            <strong>TTS will generate</strong>
+            <span className="hint">German voice generated on publish</span>
+          </div>
+          <button type="button" className="deck-btn" onClick={() => setGenerateAudio(false)}>Switch off</button>
+        </div>
+        <p className="hint">Custom upload is hidden while TTS is enabled.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="audio-source-choices">
+      <button type="button" className="audio-source-card" onClick={() => setGenerateAudio(true)}>
+        <span className="audio-source-card-icon" aria-hidden>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+            <path d="M18.5 5.5a9 9 0 0 1 0 13" />
+          </svg>
+        </span>
+        <span className="audio-source-card-title">Generate with TTS</span>
+        <span className="audio-source-card-sub">German voice, auto-aligned</span>
+      </button>
+      <label className="audio-source-card audio-source-card-upload">
+        <span className="audio-source-card-icon" aria-hidden>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+        </span>
+        <span className="audio-source-card-title">Upload .mp3 / .wav</span>
+        <span className="audio-source-card-sub">Max 5 MB</span>
+        <input
+          type="file"
+          accept="audio/mpeg,audio/mp3,audio/wav"
+          style={{ display: 'none' }}
+          onChange={e => {
+            const f = e.target.files?.[0] ?? null
+            if (f) setAudioFile(f)
+            e.target.value = ''
+          }}
+        />
+      </label>
     </div>
   )
 }

@@ -697,7 +697,14 @@ export const api = {
         questions: data.questions ?? null,
       }),
     }),
-  updateReadingText: (id: string, data: { title?: string; content?: string; level?: string | null; weekId?: string | null; clearWeek?: boolean }) =>
+  updateReadingText: (id: string, data: {
+    title?: string
+    content?: string
+    level?: string | null
+    weekId?: string | null
+    clearWeek?: boolean
+    questions?: { type: ReadingQuestionType; prompt: string; options?: string[] | null; correctAnswer?: string | null }[] | null
+  }) =>
     request<ReadingText>(`${API_BASE}/reading-texts/${id}`, {
       method: 'PUT',
       body: JSON.stringify({
@@ -706,6 +713,7 @@ export const api = {
         level: data.level ?? null,
         weekId: data.weekId ?? null,
         clearWeek: data.clearWeek ?? false,
+        questions: data.questions ?? null,
       }),
     }),
   regeneratePassageAudio: (id: string) =>

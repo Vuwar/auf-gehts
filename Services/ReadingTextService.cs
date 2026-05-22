@@ -138,7 +138,7 @@ public class ReadingTextService(
     {
         var user = await currentUser.GetAsync();
         if (user?.Role == UserRole.ViewOnly) return null;
-        var entity = await db.ReadingTexts.FirstOrDefaultAsync(t => t.Id == id);
+        var entity = await db.ReadingTexts.Include(t => t.Questions).FirstOrDefaultAsync(t => t.Id == id);
         if (entity is null) return null;
         if (user?.Role != UserRole.Admin && entity.CreatedByUserId != userId) return null;
 
@@ -150,6 +150,24 @@ public class ReadingTextService(
         {
             if (req.ClearWeek) entity.WeekId = null;
             else if (req.WeekId.HasValue) entity.WeekId = req.WeekId.Value;
+        }
+
+        if (req.Questions is not null)
+        {
+            entity.Questions.Clear();
+            int order = 0;
+            foreach (var q in req.Questions)
+            {
+                if (string.IsNullOrWhiteSpace(q.Prompt)) continue;
+                entity.Questions.Add(new ReadingTextQuestion
+                {
+                    DisplayOrder = order++,
+                    Type = ParseType(q.Type),
+                    Prompt = q.Prompt.Trim(),
+                    OptionsJson = q.Options is null ? null : JsonSerializer.Serialize(q.Options),
+                    CorrectAnswer = q.CorrectAnswer?.Trim(),
+                });
+            }
         }
 
         await db.SaveChangesAsync();

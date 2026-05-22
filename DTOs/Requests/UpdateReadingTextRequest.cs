@@ -5,5 +5,6 @@ public record UpdateReadingTextRequest(
     string? Content,
     string? Level,
     Guid? WeekId,
-    bool ClearWeek = false
+    bool ClearWeek = false,
+    List<CreateReadingTextQuestion>? Questions = null
 );

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, type ReadingText, type Week } from '../api'
 import { useAuth } from '../auth'
-import FilePicker from './FilePicker'
 import ConfirmationDialog from './ConfirmationDialog'
 import { TrashIcon } from './EditSetSheet'
 
@@ -169,24 +168,13 @@ export default function EditTextSheet({ text, onClose, onUpdated, onDeleted }: P
               )}
 
               <span className="card-label">Audio</span>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button onClick={regenerateAudio} disabled={audioBusy} className="deck-btn">
-                  {audioBusy ? 'Working…' : (audioState.audioUrl ? 'Regenerate TTS' : 'Generate TTS')}
-                </button>
-                {audioState.audioUrl && (
-                  <button onClick={() => setConfirmingRemoveAudio(true)} disabled={audioBusy} className="deck-btn danger">
-                    Remove audio
-                  </button>
-                )}
-              </div>
-              <FilePicker
-                accept="audio/mpeg,audio/mp3,audio/wav"
-                disabled={audioBusy}
-                onChange={f => { if (f) uploadAudio(f) }}
-                label="Upload audio file"
-                hint=".mp3 or .wav. Replaces current audio."
+              <EditAudioChooser
+                audioState={audioState}
+                audioBusy={audioBusy}
+                onRegenerate={regenerateAudio}
+                onUpload={uploadAudio}
+                onRequestRemove={() => setConfirmingRemoveAudio(true)}
               />
-              {audioState.audioVoice && <p className="hint">Source: {audioState.audioVoice}</p>}
             </div>
           )}
 
@@ -221,6 +209,112 @@ export default function EditTextSheet({ text, onClose, onUpdated, onDeleted }: P
           />
         </div>
       </div>
+    </div>
+  )
+}
+
+interface AudioChooserProps {
+  audioState: { audioUrl: string | null; audioVoice: string | null; audioDurationSec: number | null }
+  audioBusy: boolean
+  onRegenerate: () => void
+  onUpload: (file: File) => void
+  onRequestRemove: () => void
+}
+
+function EditAudioChooser({ audioState, audioBusy, onRegenerate, onUpload, onRequestRemove }: AudioChooserProps) {
+  const hasAudio = !!audioState.audioUrl
+  const isUpload = hasAudio && audioState.audioVoice === 'upload'
+  const isTTS = hasAudio && !isUpload
+
+  if (isTTS) {
+    return (
+      <div className="audio-source-active">
+        <div className="audio-source-active-row">
+          <div className="audio-source-active-icon" aria-hidden>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+              <path d="M18.5 5.5a9 9 0 0 1 0 13" />
+            </svg>
+          </div>
+          <div className="audio-source-active-body">
+            <strong>TTS audio active</strong>
+            <span className="hint">{audioState.audioVoice ? `Voice: ${audioState.audioVoice}` : 'German voice'}</span>
+          </div>
+        </div>
+        <div className="audio-source-actions">
+          <button type="button" onClick={onRegenerate} disabled={audioBusy} className="deck-btn">
+            {audioBusy ? 'Working…' : 'Regenerate TTS'}
+          </button>
+          <button type="button" onClick={onRequestRemove} disabled={audioBusy} className="deck-btn danger">
+            Remove audio
+          </button>
+        </div>
+        <p className="hint">Custom upload is hidden while a TTS file exists. Remove first to upload your own.</p>
+      </div>
+    )
+  }
+
+  if (isUpload) {
+    return (
+      <div className="audio-source-active">
+        <div className="audio-source-active-row">
+          <div className="audio-source-active-icon" aria-hidden>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+              <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
+            </svg>
+          </div>
+          <div className="audio-source-active-body">
+            <strong>Custom audio active</strong>
+            <span className="hint">Uploaded file</span>
+          </div>
+        </div>
+        <div className="audio-source-actions">
+          <button type="button" onClick={onRequestRemove} disabled={audioBusy} className="deck-btn danger">
+            Remove audio
+          </button>
+        </div>
+        <p className="hint">TTS generation is hidden while a custom file exists. Remove first to regenerate.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="audio-source-choices">
+      <button type="button" className="audio-source-card" onClick={onRegenerate} disabled={audioBusy}>
+        <span className="audio-source-card-icon" aria-hidden>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+            <path d="M18.5 5.5a9 9 0 0 1 0 13" />
+          </svg>
+        </span>
+        <span className="audio-source-card-title">{audioBusy ? 'Working…' : 'Generate with TTS'}</span>
+        <span className="audio-source-card-sub">German voice, auto-aligned</span>
+      </button>
+      <label className={`audio-source-card audio-source-card-upload${audioBusy ? ' is-disabled' : ''}`}>
+        <span className="audio-source-card-icon" aria-hidden>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+        </span>
+        <span className="audio-source-card-title">Upload .mp3 / .wav</span>
+        <span className="audio-source-card-sub">Max 5 MB</span>
+        <input
+          type="file"
+          accept="audio/mpeg,audio/mp3,audio/wav"
+          disabled={audioBusy}
+          style={{ display: 'none' }}
+          onChange={e => {
+            const f = e.target.files?.[0]
+            if (f) onUpload(f)
+            e.target.value = ''
+          }}
+        />
+      </label>
     </div>
   )
 }
