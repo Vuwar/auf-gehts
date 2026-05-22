@@ -2554,43 +2554,6 @@ button.status-chip:hover .status-chip-x {
   to { transform: translateY(0); opacity: 1; }
 }
 
-.pwa-check-btn {
-  position: fixed;
-  right: 12px;
-  bottom: 92px;
-  z-index: 110;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--bg-elev);
-  color: var(--text);
-  font-size: 16px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.55;
-  transition: opacity 0.15s, transform 0.15s;
-}
-
-.pwa-check-btn:hover {
-  opacity: 1;
-  color: var(--accent);
-  border-color: var(--accent-border);
-}
-
-.pwa-check-btn:active {
-  transform: scale(0.92);
-}
-
-@media (min-width: 640px) {
-  .pwa-check-btn {
-    right: 16px;
-    bottom: 16px;
-  }
-}
-
 @media (min-width: 640px) {
   .toast { bottom: 24px; }
   .update-toast {

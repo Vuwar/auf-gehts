@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 
 const FRESH_TAB_WINDOW_MS = 4000
@@ -7,7 +7,6 @@ const UPDATE_POLL_MS = 5 * 60 * 1000
 export default function PWAUpdatePrompt() {
   const mountedAtRef = useRef(Date.now())
   const registrationRef = useRef<ServiceWorkerRegistration | null>(null)
-  const [checking, setChecking] = useState(false)
 
   const {
     needRefresh: [needRefresh, setNeedRefresh],
@@ -44,31 +43,7 @@ export default function PWAUpdatePrompt() {
     }
   }, [needRefresh, updateServiceWorker])
 
-  const manualCheck = async () => {
-    const reg = registrationRef.current
-    if (!reg) return
-    setChecking(true)
-    try {
-      await reg.update()
-    } catch {}
-    finally {
-      window.setTimeout(() => setChecking(false), 1500)
-    }
-  }
-
-  if (!needRefresh) {
-    return (
-      <button
-        type="button"
-        className="pwa-check-btn"
-        onClick={manualCheck}
-        aria-label="Check for updates"
-        title="Check for updates"
-      >
-        {checking ? '…' : '⟳'}
-      </button>
-    )
-  }
+  if (!needRefresh) return null
 
   return (
     <div className="update-toast" role="status" aria-live="polite">
