@@ -46,7 +46,6 @@ function OwnProfileView() {
   const [users, setUsers] = useState<UserProfile[]>([])
   const [usersLoading, setUsersLoading] = useState(false)
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null)
-  const [activityOpen, setActivityOpen] = useState(false)
 
   // Lazy stats
   const [statsOpen, setStatsOpen] = useState(false)
@@ -207,24 +206,6 @@ function OwnProfileView() {
 
       {profile.role === 'Admin' && (
         <>
-          <h2 className="section-title">🛡️ Admin · Activity log</h2>
-          <section className="collapsible">
-            <button
-              type="button"
-              className="collapsible-header"
-              onClick={() => setActivityOpen(o => !o)}
-              aria-expanded={activityOpen}
-            >
-              <span>📜 User activity (logins, word sets, texts…)</span>
-              <span aria-hidden="true">{activityOpen ? '▾' : '▸'}</span>
-            </button>
-            {activityOpen && (
-              <div className="collapsible-body">
-                <AdminActivity />
-              </div>
-            )}
-          </section>
-
           <h2 className="section-title">Admin · Users</h2>
           {usersLoading ? (
             <ListSkeleton rows={4} withAvatar />
@@ -456,11 +437,14 @@ function RelationshipAction({ state, onAdd }: { state: FriendshipState; onAdd: (
 }
 
 function OtherProfileView({ userId }: { userId: string }) {
+  const { profile: viewer } = useAuth()
+  const isAdmin = viewer?.role === 'Admin'
   const [profile, setProfile] = useState<PublicUserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmUnfriend, setConfirmUnfriend] = useState(false)
+  const [activityOpen, setActivityOpen] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -586,6 +570,28 @@ function OtherProfileView({ userId }: { userId: string }) {
         onCancel={() => setConfirmUnfriend(false)}
         onConfirm={unfriend}
       />
+
+      {isAdmin && (
+        <>
+          <h2 className="section-title">🛡️ Admin · Activity log</h2>
+          <section className="collapsible">
+            <button
+              type="button"
+              className="collapsible-header"
+              onClick={() => setActivityOpen(o => !o)}
+              aria-expanded={activityOpen}
+            >
+              <span>📜 What {profile.displayName} has done</span>
+              <span aria-hidden="true">{activityOpen ? '▾' : '▸'}</span>
+            </button>
+            {activityOpen && (
+              <div className="collapsible-body">
+                <AdminActivity userId={profile.id} />
+              </div>
+            )}
+          </section>
+        </>
+      )}
     </div>
   )
 }

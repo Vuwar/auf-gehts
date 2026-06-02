@@ -44,7 +44,8 @@ function targetOf(entry: ActivityLogEntry): string | null {
   }
 }
 
-export default function AdminActivity() {
+// `userId` scopes the feed to a single user's own actions (rendered on their profile).
+export default function AdminActivity({ userId }: { userId?: string }) {
   const [page, setPage] = useState<ActivityLogsPage | null>(null)
   const [types, setTypes] = useState<ActivityTypeCount[]>([])
   const [loading, setLoading] = useState(false)
@@ -52,9 +53,12 @@ export default function AdminActivity() {
 
   const [eventType, setEventType] = useState('')
   const [search, setSearch] = useState('')
-  const [windowDays, setWindowDays] = useState<number | null>(7)
+  const [windowDays, setWindowDays] = useState<number | null>(null)
   const [pageNum, setPageNum] = useState(1)
   const debouncer = useRef<number | null>(null)
+
+  // Reset paging whenever we switch which user we're looking at.
+  useEffect(() => { setPageNum(1) }, [userId])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -64,6 +68,7 @@ export default function AdminActivity() {
         ? undefined
         : new Date(Date.now() - windowDays * 86_400_000).toISOString()
       const resp = await api.adminActivityLogs({
+        userId,
         eventType: eventType || undefined,
         search: search.trim() || undefined,
         since,
@@ -76,7 +81,7 @@ export default function AdminActivity() {
     } finally {
       setLoading(false)
     }
-  }, [eventType, search, windowDays, pageNum])
+  }, [userId, eventType, search, windowDays, pageNum])
 
   // Debounce so typing in the search box doesn't fire a request per keystroke.
   useEffect(() => {
@@ -107,7 +112,7 @@ export default function AdminActivity() {
           type="search"
           value={search}
           onChange={e => { setSearch(e.target.value); setPageNum(1) }}
-          placeholder="Search name / set / text…"
+          placeholder={userId ? 'Search set / text…' : 'Search name / set / text…'}
           aria-label="Search activity"
         />
         <div className="logs-window-picker">
@@ -131,7 +136,7 @@ export default function AdminActivity() {
       )}
       {page && page.items.length > 0 && (
         <ul className="activity-feed">
-          {page.items.map(entry => <ActivityRow key={entry.id} entry={entry} />)}
+          {page.items.map(entry => <ActivityRow key={entry.id} entry={entry} showUser={!userId} />)}
         </ul>
       )}
 
@@ -148,24 +153,31 @@ export default function AdminActivity() {
   )
 }
 
-function ActivityRow({ entry }: { entry: ActivityLogEntry }) {
+function ActivityRow({ entry, showUser }: { entry: ActivityLogEntry; showUser: boolean }) {
   const meta = metaFor(entry.eventType)
   const target = targetOf(entry)
   const when = new Date(entry.timestamp)
   const name = entry.userName ?? entry.userEmail ?? 'Unknown user'
+  // When scoped to one profile (showUser=false) the verb leads with a capital.
+  const label = showUser ? meta.label : meta.label.charAt(0).toUpperCase() + meta.label.slice(1)
 
   return (
     <li className="activity-row">
       <span className="activity-icon" aria-hidden="true">{meta.icon}</span>
       <div className="activity-text">
         <span>
-          {entry.userId
-            ? <Link to={`/profile/${entry.userId}`}><strong>{name}</strong></Link>
-            : <strong>{name}</strong>}
-          {' '}{meta.label}
+          {showUser && (
+            <>
+              {entry.userId
+                ? <Link to={`/profile/${entry.userId}`}><strong>{name}</strong></Link>
+                : <strong>{name}</strong>}
+              {' '}
+            </>
+          )}
+          {label}
           {target && <> <span className="activity-target">“{target}”</span></>}
         </span>
-        {entry.userEmail && entry.userName && (
+        {showUser && entry.userEmail && entry.userName && (
           <span className="hint">{entry.userEmail}</span>
         )}
       </div>
