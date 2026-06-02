@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using Api.Data;
 using Api.DTOs.Responses;
 using Api.Models;
@@ -105,10 +106,67 @@ public class AdminLogsController(AppDbContext db, CurrentUserAccessor currentUse
                 .ToListAsync())
                 .ToDictionary(u => u.Id, u => (Name: (string?)(u.DisplayName ?? u.Email), Email: u.Email));
 
+        // Resolve a friendly target name + in-app link for page_view rows by parsing the
+        // recorded client path (e.g. /sets/<slug>, /reader/<id>, /profile/<id>).
+        var setSlugs = new HashSet<string>();
+        var textIds = new HashSet<Guid>();
+        var viewedUserIds = new HashSet<Guid>();
+        var pathByRow = new Dictionary<long, string>();
+        foreach (var r in rows.Where(r => r.EventType == "activity.page_view" && r.MetadataJson != null))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(r.MetadataJson!);
+                if (!doc.RootElement.TryGetProperty("path", out var pEl) || pEl.GetString() is not string p) continue;
+                pathByRow[r.Id] = p;
+                if (p.StartsWith("/sets/")) setSlugs.Add(Uri.UnescapeDataString(p["/sets/".Length..]));
+                else if (p.StartsWith("/reader/") && Guid.TryParse(p["/reader/".Length..], out var tid)) textIds.Add(tid);
+                else if (p.StartsWith("/profile/") && Guid.TryParse(p["/profile/".Length..], out var uid)) viewedUserIds.Add(uid);
+            }
+            catch { /* malformed metadata -> no enrichment */ }
+        }
+
+        var setNameBySlug = setSlugs.Count == 0
+            ? new Dictionary<string, string>()
+            : (await db.WordSets.AsNoTracking().Where(s => setSlugs.Contains(s.Slug))
+                .Select(s => new { s.Slug, s.Name }).ToListAsync())
+                .ToDictionary(s => s.Slug, s => s.Name);
+        var titleById = textIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : (await db.ReadingTexts.AsNoTracking().Where(t => textIds.Contains(t.Id))
+                .Select(t => new { t.Id, t.Title }).ToListAsync())
+                .ToDictionary(t => t.Id, t => t.Title);
+        var nameByViewedUser = viewedUserIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : (await db.Users.AsNoTracking().Where(u => viewedUserIds.Contains(u.Id))
+                .Select(u => new { u.Id, Name = u.DisplayName ?? u.Email }).ToListAsync())
+                .ToDictionary(u => u.Id, u => u.Name);
+
         var items = rows.Select(r =>
         {
             string? name = null, email = null;
             if (r.UserId.HasValue && users.TryGetValue(r.UserId.Value, out var u)) { name = u.Name; email = u.Email; }
+
+            string? link = null, targetLabel = null;
+            if (r.EventType == "activity.page_view" && pathByRow.TryGetValue(r.Id, out var path))
+            {
+                if (path.StartsWith("/sets/"))
+                {
+                    link = path;
+                    targetLabel = setNameBySlug.GetValueOrDefault(Uri.UnescapeDataString(path["/sets/".Length..]));
+                }
+                else if (path.StartsWith("/reader/") && Guid.TryParse(path["/reader/".Length..], out var tid))
+                {
+                    link = path;
+                    targetLabel = titleById.GetValueOrDefault(tid);
+                }
+                else if (path.StartsWith("/profile/") && Guid.TryParse(path["/profile/".Length..], out var uid))
+                {
+                    link = path;
+                    targetLabel = nameByViewedUser.GetValueOrDefault(uid);
+                }
+            }
+
             return new
             {
                 id = r.Id,
@@ -119,6 +177,8 @@ public class AdminLogsController(AppDbContext db, CurrentUserAccessor currentUse
                 userEmail = email,
                 message = r.Message,
                 metadataJson = r.MetadataJson,
+                link,
+                targetLabel,
             };
         });
 

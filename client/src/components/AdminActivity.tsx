@@ -156,7 +156,8 @@ export default function AdminActivity({ userId }: { userId?: string }) {
 
 function ActivityRow({ entry, showUser }: { entry: ActivityLogEntry; showUser: boolean }) {
   const meta = metaFor(entry.eventType)
-  const target = targetOf(entry)
+  // Server-resolved name (e.g. word set / text / viewed user) wins over raw metadata.
+  const target = entry.targetLabel ?? targetOf(entry)
   const when = new Date(entry.timestamp)
   const name = entry.userName ?? entry.userEmail ?? 'Unknown user'
   // When scoped to one profile (showUser=false) the verb leads with a capital.
@@ -170,13 +171,18 @@ function ActivityRow({ entry, showUser }: { entry: ActivityLogEntry; showUser: b
           {showUser && (
             <>
               {entry.userId
-                ? <Link to={`/profile/${entry.userId}`}><strong>{name}</strong></Link>
+                ? <Link to={`/profile/${entry.userId}`} className="activity-link"><strong>{name}</strong></Link>
                 : <strong>{name}</strong>}
               {' '}
             </>
           )}
           {label}
-          {target && <> <span className="activity-target">“{target}”</span></>}
+          {target && (
+            <> {entry.link
+              ? <Link to={entry.link} className="activity-link activity-target">“{target}”</Link>
+              : <span className="activity-target">“{target}”</span>}
+            </>
+          )}
         </span>
         {showUser && entry.userEmail && entry.userName && (
           <span className="hint">{entry.userEmail}</span>

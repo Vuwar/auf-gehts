@@ -334,6 +334,8 @@ export interface ActivityLogEntry {
   userEmail: string | null
   message: string | null
   metadataJson: string | null
+  link?: string | null
+  targetLabel?: string | null
 }
 
 export interface ActivityLogsPage {
