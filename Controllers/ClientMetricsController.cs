@@ -39,6 +39,24 @@ public class ClientMetricsController(IEventLog events) : BaseController
         return NoContent();
     }
 
+    // Client-reported page view (SPA route change). Authenticated so we can attribute it
+    // to the user; anonymous hits are dropped.
+    [HttpPost("page-view")]
+    public IActionResult PageView([FromBody] PageViewRequest req)
+    {
+        var userId = GetUserId();
+        if (userId is null || string.IsNullOrWhiteSpace(req.Path)) return NoContent();
+        events.Write(
+            level: EventLogLevel.Info,
+            eventType: "activity.page_view",
+            message: req.Label,
+            userId: userId,
+            endpoint: SanitizePath(req.Path),
+            source: "Client",
+            metadata: new { path = req.Path, label = req.Label });
+        return NoContent();
+    }
+
     private static string SanitizePath(string? url)
     {
         if (string.IsNullOrEmpty(url)) return "";
@@ -46,6 +64,7 @@ public class ClientMetricsController(IEventLog events) : BaseController
         return qIdx >= 0 ? url[..qIdx] : url;
     }
 
+    public record PageViewRequest(string? Path, string? Label);
     public record ClientMetricsBatch(string? BundleVersion, List<ClientMetricSample> Samples);
     public record ClientMetricSample(
         string? TraceId,

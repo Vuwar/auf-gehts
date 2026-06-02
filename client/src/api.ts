@@ -835,6 +835,12 @@ export const api = {
   },
   adminActivityTypes: (days: number = 30) =>
     request<ActivityTypeCount[]>(`${API_BASE}/admin/logs/activity/types?days=${days}`),
+  trackPageView: (path: string, label: string) =>
+    authedFetch(`${API_BASE}/client-metrics/page-view`, {
+      method: 'POST',
+      body: JSON.stringify({ path, label }),
+      keepalive: true,
+    }).catch(() => { /* best-effort telemetry */ }),
   adminSetUserRole: (id: string, role: UserRole) =>
     request<UserProfile>(`${API_BASE}/admin/users/${id}/role`, {
       method: 'PUT',

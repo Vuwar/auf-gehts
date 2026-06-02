@@ -8,6 +8,7 @@ import { ListSkeleton } from './Skeletons'
 const ACTIVITY_META: Record<string, { icon: string; label: string }> = {
   'activity.signup': { icon: '✨', label: 'signed up' },
   'activity.app_open': { icon: '🚪', label: 'opened the app' },
+  'activity.page_view': { icon: '👁️', label: 'viewed' },
   'activity.wordset.created': { icon: '📝', label: 'created word set' },
   'activity.wordset.updated': { icon: '✏️', label: 'edited word set' },
   'activity.wordset.deleted': { icon: '🗑️', label: 'deleted word set' },
@@ -37,7 +38,7 @@ function targetOf(entry: ActivityLogEntry): string | null {
   if (!entry.metadataJson) return entry.message
   try {
     const m = JSON.parse(entry.metadataJson) as Record<string, unknown>
-    const t = m.name ?? m.title ?? m.targetEmail ?? m.role ?? m.email
+    const t = m.name ?? m.title ?? m.label ?? m.targetEmail ?? m.role ?? m.email
     return typeof t === 'string' ? t : entry.message
   } catch {
     return entry.message

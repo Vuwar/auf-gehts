@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, NavLink, Outlet, useLocation, Link } from 'react-router-dom'
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
+import { api } from './api'
 import Library from './components/Library'
 import WordSetView from './components/WordSetView'
 import Dashboard from './components/Dashboard'
@@ -85,9 +86,37 @@ function NavIcon({ name }: { name: NavIconName }) {
     </svg>
   )
 }
+// Human label for a client route, used in the admin activity feed.
+function labelForPath(path: string): string {
+  if (path === '/dashboard' || path === '/') return 'Dashboard'
+  if (path === '/library') return 'Library'
+  if (path === '/alphabet') return 'Alphabet'
+  if (path === '/reader') return 'Texts (Reader)'
+  if (path.startsWith('/reader/')) return 'Reading text'
+  if (path === '/abenteuer') return 'Weeks (Abenteuer)'
+  if (path.startsWith('/abenteuer/')) return `Week ${decodeURIComponent(path.slice('/abenteuer/'.length))}`
+  if (path.startsWith('/tags/')) return 'Day'
+  if (path.startsWith('/sets/')) return `Word set ${decodeURIComponent(path.slice('/sets/'.length))}`
+  if (path === '/profile') return 'Own profile'
+  if (path.startsWith('/profile/')) return 'A user profile'
+  if (path === '/admin/logs') return 'Admin logs'
+  return path
+}
+
 function ProtectedLayout() {
   const { user, loading } = useAuth()
   const location = useLocation()
+  const lastTracked = useRef<string | null>(null)
+
+  // Report each distinct route the signed-in user lands on. Dedup consecutive identical
+  // paths so StrictMode double-mounts / re-renders don't double-log.
+  useEffect(() => {
+    if (!user) return
+    const path = location.pathname
+    if (lastTracked.current === path) return
+    lastTracked.current = path
+    api.trackPageView(path, labelForPath(path))
+  }, [user, location.pathname])
 
   if (loading) {
     return <AppShellSkeleton />
