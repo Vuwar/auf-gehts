@@ -1,10 +1,11 @@
 using Api.Models;
 using Api.Repositories;
+using Api.Services.Logging;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace Api.Services;
 
-public class ProgressService(IProgressRepository repo, IUserRepository userRepo, IMemoryCache cache)
+public class ProgressService(IProgressRepository repo, IUserRepository userRepo, IMemoryCache cache, IEventLog events)
 {
     public async Task<UserSetProgress> SetStatusAsync(Guid userId, Guid setId, ProgressStatus status)
     {
@@ -12,6 +13,9 @@ public class ProgressService(IProgressRepository repo, IUserRepository userRepo,
         if (status == ProgressStatus.Completed)
         {
             await BumpStreakAsync(userId);
+            events.Write(EventLogLevel.Info, "activity.wordset.completed",
+                userId: userId, source: "ProgressService",
+                metadata: new { setId });
         }
         return result;
     }

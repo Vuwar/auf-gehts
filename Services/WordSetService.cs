@@ -4,6 +4,7 @@ using Api.DTOs.Responses;
 using Api.Mappings;
 using Api.Models;
 using Api.Repositories;
+using Api.Services.Logging;
 using Api.Utils;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,7 +14,8 @@ public class WordSetService(
     IWordSetRepository sets,
     IProgressRepository progress,
     CurrentUserAccessor currentUser,
-    AppDbContext db)
+    AppDbContext db,
+    IEventLog events)
 {
     public async Task<LibraryResponse> ListForLibraryAsync(Guid userId)
     {
@@ -156,6 +158,9 @@ public class WordSetService(
             CreatedByUser = user,
         };
         await sets.AddAsync(set);
+        events.Write(EventLogLevel.Info, "activity.wordset.created",
+            message: set.Name, userId: userId, source: "WordSetService",
+            metadata: new { setId = set.Id, name = set.Name });
         return (set.ToResponse(userId, 0), null);
     }
 
@@ -197,6 +202,9 @@ public class WordSetService(
         }
 
         await sets.SaveAsync();
+        events.Write(EventLogLevel.Info, "activity.wordset.updated",
+            message: set.Name, userId: userId, source: "WordSetService",
+            metadata: new { setId = set.Id, name = set.Name });
         var count = await db.Words.CountAsync(w => w.WordSetId == set.Id);
         var prog = await progress.GetAsync(userId, set.Id);
         return set.ToResponse(userId, count, prog?.Status ?? ProgressStatus.NotStarted, prog?.IsFavorite ?? false);
@@ -209,7 +217,11 @@ public class WordSetService(
         var set = await sets.GetByIdAsync(id);
         if (set is null) return false;
         if (user?.Role != UserRole.Admin && set.CreatedByUserId != userId) return false;
+        var name = set.Name;
         await sets.DeleteAsync(set);
+        events.Write(EventLogLevel.Info, "activity.wordset.deleted",
+            message: name, userId: userId, source: "WordSetService",
+            metadata: new { setId = id, name });
         return true;
     }
 

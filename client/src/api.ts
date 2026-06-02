@@ -325,6 +325,39 @@ export interface LogsStats {
   slowQueryCount: number
 }
 
+export interface ActivityLogEntry {
+  id: number
+  timestamp: string
+  eventType: string
+  userId: string | null
+  userName: string | null
+  userEmail: string | null
+  message: string | null
+  metadataJson: string | null
+}
+
+export interface ActivityLogsPage {
+  total: number
+  page: number
+  pageSize: number
+  items: ActivityLogEntry[]
+}
+
+export interface ActivityLogParams {
+  eventType?: string
+  userId?: string
+  search?: string
+  since?: string
+  until?: string
+  page?: number
+  pageSize?: number
+}
+
+export interface ActivityTypeCount {
+  eventType: string
+  count: number
+}
+
 export class ApiError extends Error {
   status: number
   constructor(message: string, status: number) {
@@ -789,6 +822,19 @@ export const api = {
     if (params.pageSize) q.set('pageSize', String(params.pageSize))
     return request<LogsPage>(`${API_BASE}/admin/logs?${q.toString()}`)
   },
+  adminActivityLogs: (params: ActivityLogParams = {}) => {
+    const q = new URLSearchParams()
+    if (params.eventType) q.set('eventType', params.eventType)
+    if (params.userId) q.set('userId', params.userId)
+    if (params.search) q.set('search', params.search)
+    if (params.since) q.set('since', params.since)
+    if (params.until) q.set('until', params.until)
+    if (params.page) q.set('page', String(params.page))
+    if (params.pageSize) q.set('pageSize', String(params.pageSize))
+    return request<ActivityLogsPage>(`${API_BASE}/admin/logs/activity?${q.toString()}`)
+  },
+  adminActivityTypes: (days: number = 30) =>
+    request<ActivityTypeCount[]>(`${API_BASE}/admin/logs/activity/types?days=${days}`),
   adminSetUserRole: (id: string, role: UserRole) =>
     request<UserProfile>(`${API_BASE}/admin/users/${id}/role`, {
       method: 'PUT',

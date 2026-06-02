@@ -4,13 +4,14 @@ using Api.Mappings;
 using Api.Models;
 using Api.Repositories;
 using Api.Services;
+using Api.Services.Logging;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace Api.Controllers;
 
 [Route("api/admin")]
-public class AdminController(IUserRepository userRepo, CurrentUserAccessor currentUser, IMemoryCache cache) : BaseController
+public class AdminController(IUserRepository userRepo, CurrentUserAccessor currentUser, IMemoryCache cache, IEventLog events) : BaseController
 {
     [HttpGet("users")]
     public async Task<ActionResult<List<UserResponse>>> Users()
@@ -32,6 +33,9 @@ public class AdminController(IUserRepository userRepo, CurrentUserAccessor curre
         target.Role = role;
         await userRepo.SaveAsync();
         CurrentUserAccessor.Invalidate(cache, id);
+        events.Write(EventLogLevel.Info, "activity.user.role_changed",
+            message: $"{target.Email} -> {role}", userId: current.Id, source: "AdminController",
+            metadata: new { targetUserId = id, targetEmail = target.Email, role = role.ToString() });
         return Ok(target.ToResponse());
     }
 
@@ -43,8 +47,12 @@ public class AdminController(IUserRepository userRepo, CurrentUserAccessor curre
         if (current.Id == id) return BadRequest(new { error = "Cannot delete your own account" });
         var target = await userRepo.GetByIdAsync(id);
         if (target is null) return NotFound();
+        var targetEmail = target.Email;
         await userRepo.DeleteAsync(target);
         CurrentUserAccessor.Invalidate(cache, id);
+        events.Write(EventLogLevel.Info, "activity.user.deleted",
+            message: targetEmail, userId: current.Id, source: "AdminController",
+            metadata: new { targetUserId = id, targetEmail });
         return NoContent();
     }
 }

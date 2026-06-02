@@ -124,6 +124,9 @@ public class ReadingTextService(
         }
         db.ReadingTexts.Add(entity);
         await db.SaveChangesAsync();
+        events.Write(EventLogLevel.Info, "activity.text.created",
+            message: entity.Title, userId: userId, source: "ReadingTextService",
+            metadata: new { textId = entity.Id, title = entity.Title });
 
         var wantAudio = req.GenerateAudio ?? true;
         if (wantAudio)
@@ -171,6 +174,9 @@ public class ReadingTextService(
         }
 
         await db.SaveChangesAsync();
+        events.Write(EventLogLevel.Info, "activity.text.updated",
+            message: entity.Title, userId: userId, source: "ReadingTextService",
+            metadata: new { textId = entity.Id, title = entity.Title });
         return await GetAsync(entity.Id, userId);
     }
 
@@ -235,8 +241,12 @@ public class ReadingTextService(
         {
             await audioStorage.DeleteAsync(entity.AudioPath, CancellationToken.None);
         }
+        var title = entity.Title;
         db.ReadingTexts.Remove(entity);
         await db.SaveChangesAsync();
+        events.Write(EventLogLevel.Info, "activity.text.deleted",
+            message: title, userId: userId, source: "ReadingTextService",
+            metadata: new { textId = id, title });
         return true;
     }
 

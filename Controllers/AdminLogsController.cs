@@ -58,6 +58,89 @@ public class AdminLogsController(AppDbContext db, CurrentUserAccessor currentUse
         return Ok(new { total, page, pageSize, items });
     }
 
+    // User-activity feed: business events (logins, sign-ups, word set / text CRUD, admin
+    // actions) with the acting user's name+email resolved. Distinct from the raw /logs
+    // query which is request/perf oriented.
+    [HttpGet("activity")]
+    public async Task<ActionResult<object>> Activity(
+        [FromQuery] string? eventType,
+        [FromQuery] Guid? userId,
+        [FromQuery] string? search,
+        [FromQuery] DateTime? since,
+        [FromQuery] DateTime? until,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50)
+    {
+        var current = await currentUser.GetAsync();
+        if (current?.Role != UserRole.Admin) return Forbid();
+
+        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+        page = Math.Max(1, page);
+
+        var q = db.EventLogs.AsNoTracking().Where(e => e.EventType.StartsWith("activity."));
+        if (!string.IsNullOrEmpty(eventType)) q = q.Where(e => e.EventType == eventType);
+        if (userId.HasValue) q = q.Where(e => e.UserId == userId.Value);
+        if (since.HasValue) q = q.Where(e => e.Timestamp >= since.Value);
+        if (until.HasValue) q = q.Where(e => e.Timestamp <= until.Value);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.Trim();
+            q = q.Where(e => (e.Message != null && EF.Functions.ILike(e.Message, $"%{s}%"))
+                || (e.MetadataJson != null && EF.Functions.ILike(e.MetadataJson, $"%{s}%")));
+        }
+
+        var total = await q.CountAsync();
+        var rows = await q.OrderByDescending(e => e.Timestamp)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(e => new { e.Id, e.Timestamp, e.EventType, e.UserId, e.Message, e.MetadataJson })
+            .ToListAsync();
+
+        var ids = rows.Where(r => r.UserId.HasValue).Select(r => r.UserId!.Value).Distinct().ToList();
+        var users = ids.Count == 0
+            ? new Dictionary<Guid, (string? Name, string Email)>()
+            : (await db.Users.AsNoTracking()
+                .Where(u => ids.Contains(u.Id))
+                .Select(u => new { u.Id, u.DisplayName, u.Email })
+                .ToListAsync())
+                .ToDictionary(u => u.Id, u => (Name: (string?)(u.DisplayName ?? u.Email), Email: u.Email));
+
+        var items = rows.Select(r =>
+        {
+            string? name = null, email = null;
+            if (r.UserId.HasValue && users.TryGetValue(r.UserId.Value, out var u)) { name = u.Name; email = u.Email; }
+            return new
+            {
+                id = r.Id,
+                timestamp = r.Timestamp,
+                eventType = r.EventType,
+                userId = r.UserId,
+                userName = name,
+                userEmail = email,
+                message = r.Message,
+                metadataJson = r.MetadataJson,
+            };
+        });
+
+        return Ok(new { total, page, pageSize, items });
+    }
+
+    // Distinct activity event types in the window, for the admin UI's filter dropdown.
+    [HttpGet("activity/types")]
+    public async Task<ActionResult<object>> ActivityTypes([FromQuery] int days = 30)
+    {
+        var current = await currentUser.GetAsync();
+        if (current?.Role != UserRole.Admin) return Forbid();
+        var since = DateTime.UtcNow.AddDays(-Math.Clamp(days, 1, 365));
+        var rows = await db.EventLogs.AsNoTracking()
+            .Where(e => e.EventType.StartsWith("activity.") && e.Timestamp >= since)
+            .GroupBy(e => e.EventType)
+            .Select(g => new { eventType = g.Key, count = g.Count() })
+            .OrderByDescending(x => x.count)
+            .ToListAsync();
+        return Ok(rows);
+    }
+
     [HttpGet("stats")]
     public async Task<ActionResult<object>> Stats([FromQuery] int hours = 1, [FromQuery] int? minutes = null)
     {

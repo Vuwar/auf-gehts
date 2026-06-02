@@ -12,6 +12,7 @@ import {
 } from '../api'
 import { useAuth } from '../auth'
 import EditUserSheet from './EditUserSheet'
+import AdminActivity from './AdminActivity'
 import ConfirmationDialog from './ConfirmationDialog'
 import { ListSkeleton, PageSkeleton, StatsSkeleton } from './Skeletons'
 
@@ -45,6 +46,7 @@ function OwnProfileView() {
   const [users, setUsers] = useState<UserProfile[]>([])
   const [usersLoading, setUsersLoading] = useState(false)
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null)
+  const [activityOpen, setActivityOpen] = useState(false)
 
   // Lazy stats
   const [statsOpen, setStatsOpen] = useState(false)
@@ -205,6 +207,24 @@ function OwnProfileView() {
 
       {profile.role === 'Admin' && (
         <>
+          <h2 className="section-title">🛡️ Admin · Activity log</h2>
+          <section className="collapsible">
+            <button
+              type="button"
+              className="collapsible-header"
+              onClick={() => setActivityOpen(o => !o)}
+              aria-expanded={activityOpen}
+            >
+              <span>📜 User activity (logins, word sets, texts…)</span>
+              <span aria-hidden="true">{activityOpen ? '▾' : '▸'}</span>
+            </button>
+            {activityOpen && (
+              <div className="collapsible-body">
+                <AdminActivity />
+              </div>
+            )}
+          </section>
+
           <h2 className="section-title">Admin · Users</h2>
           {usersLoading ? (
             <ListSkeleton rows={4} withAvatar />

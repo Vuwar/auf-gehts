@@ -1,12 +1,13 @@
 using Api.DTOs.Requests;
 using Api.Models;
 using Api.Repositories;
+using Api.Services.Logging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace Api.Services;
 
-public class UserService(IUserRepository repo, IMemoryCache cache)
+public class UserService(IUserRepository repo, IMemoryCache cache, IEventLog events)
 {
     public async Task<User> EnsureExistsAsync(Guid id, string email)
     {
@@ -16,6 +17,10 @@ public class UserService(IUserRepository repo, IMemoryCache cache)
             try
             {
                 user = await repo.AddAsync(new User { Id = id, Email = email });
+                // First time we ever saw this account -> sign-up.
+                events.Write(EventLogLevel.Info, "activity.signup",
+                    message: email, userId: id, source: "UserService",
+                    metadata: new { email });
             }
             catch (DbUpdateException)
             {
@@ -32,6 +37,10 @@ public class UserService(IUserRepository repo, IMemoryCache cache)
             user.LastSeenAt = DateTime.UtcNow;
             if (!string.IsNullOrEmpty(email) && user.Email != email) user.Email = email;
             await repo.SaveAsync();
+            // EnsureExistsAsync only runs on a usersync cache miss (>=5min since last
+            // request), so this fires roughly once per session = login / app open.
+            events.Write(EventLogLevel.Info, "activity.app_open",
+                userId: id, source: "UserService");
         }
         return user;
     }
